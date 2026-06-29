@@ -1,0 +1,23 @@
+[package]
+name = "heyting"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+authors = ["Arc <attobop@gmail.com>"]
+repository = "https://github.com/arclabs561/heyting"
+description = "Complex logical query answering over knowledge graph embeddings"
+keywords = ["knowledge-graph", "query-answering", "fuzzy-logic", "reasoning"]
+categories = ["science", "algorithms"]
+readme = "README.md"
+publish = true
+
+[workspace]
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.5"
+
+[lints.rust]
+missing_docs = "warn"
