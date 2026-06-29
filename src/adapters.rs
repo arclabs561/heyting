@@ -1,8 +1,8 @@
-//! Adapters from ecosystem models to [`AtomicScorer`].
+//! Adapters from ecosystem models to [`AtomicScorer`](crate::AtomicScorer).
 //!
 //! Each adapter is behind an optional feature so the core stays dependency-free.
-//! They are the worked proof that the [`AtomicScorer`] seam carries real trained
-//! embeddings, not just the in-memory [`crate::FuzzyKg`].
+//! They are the worked proof that the [`AtomicScorer`](crate::AtomicScorer) seam
+//! carries real trained embeddings, not just the in-memory [`crate::FuzzyKg`].
 
 #[cfg(feature = "tranz")]
 mod tranz_adapter {
