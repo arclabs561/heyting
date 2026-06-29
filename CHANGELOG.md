@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0] - 2026-06-29
+
+### Added
+
+- `adapters::PointModel` (feature `tranz`): wraps any `tranz::Scorer`
+  (TransE/RotatE/ComplEx/DistMult) as an `AtomicScorer`, mapping link-prediction
+  scores to `[0, 1]` membership via `sigmoid(-score)`. The query engine now runs
+  over trained point embeddings, not just `FuzzyKg`.
+
 ## [0.1.0] - 2026-06-28
 
 Initial release.

@@ -49,6 +49,7 @@
 
 #![warn(missing_docs)]
 
+pub mod adapters;
 pub mod kg;
 pub mod query;
 pub mod truth;
