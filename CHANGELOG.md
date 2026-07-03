@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0] - 2026-07-03
+
+### Added
+
+- `prune` module: `CandidateSource` (the serving-index seam) and
+  `answer_query_topk_pruned`, sparse evaluation of the EPFO fragment that
+  scores only proposed candidates; negation/implication queries fall back
+  to dense evaluation. `FuzzyKg` is its own exact candidate source.
+- `AtomicScorer::project_subset` (defaulted): score a candidate subset;
+  override it in embedding scorers to realize the pruning speedup.
+- `adapters::BoxModel` (feature `subsume`): Query2Box-style scoring over
+  trained box embeddings (entities as points, relations as
+  translation + offset pairs, degrees `exp(-distance / temperature)`).
+
 ## [0.3.0] - 2026-07-03
 
 ### Added
