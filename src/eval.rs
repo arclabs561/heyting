@@ -70,7 +70,6 @@ pub struct QueryMetrics {
 pub fn crisp_answers(scorer: &dyn AtomicScorer, query: &Query, threshold: f32) -> BTreeSet<usize> {
     let config = QueryConfig {
         beam_k: scorer.num_entities(),
-        ..QueryConfig::default()
     };
     answer_query::<Godel>(scorer, query, &config)
         .iter()
