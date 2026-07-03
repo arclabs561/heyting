@@ -24,6 +24,21 @@ pub trait AtomicScorer {
     /// Membership degrees in `[0, 1]` for all entities as the answer to
     /// `(anchor, relation, ?)`. Higher means more strongly an answer.
     fn project(&self, anchor: usize, relation: usize) -> Vec<f32>;
+
+    /// Membership degrees for `candidates` only, aligned with `candidates`.
+    ///
+    /// The default gathers from the dense [`project`](AtomicScorer::project);
+    /// embedding-backed scorers should override it to score only the subset,
+    /// which is where the [`crate::prune`] path gets its speedup.
+    fn project_subset(&self, anchor: usize, relation: usize, candidates: &[usize]) -> Vec<f32> {
+        let dense = self.project(anchor, relation);
+        candidates
+            .iter()
+            // Out-of-range candidate = degree 0.0 by the engine's padding
+            // convention (same as `answer_query`), not an error sentinel.
+            .map(|&i| dense.get(i).copied().unwrap_or(0.0))
+            .collect()
+    }
 }
 
 /// Evaluation knobs.

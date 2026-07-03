@@ -52,10 +52,12 @@
 pub mod adapters;
 pub mod eval;
 pub mod kg;
+pub mod prune;
 pub mod query;
 pub mod truth;
 
 pub use eval::{hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
 pub use kg::FuzzyKg;
+pub use prune::{answer_query_topk_pruned, CandidateSource};
 pub use query::{answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig};
 pub use truth::{Godel, Lukasiewicz, Product, Truth};

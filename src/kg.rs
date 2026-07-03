@@ -51,6 +51,18 @@ impl FuzzyKg {
     pub fn num_edges(&self) -> usize {
         self.edges.values().map(Vec::len).sum()
     }
+
+    /// Tail entities with an edge `(anchor, relation, tail)`, unordered.
+    ///
+    /// This is the exact nonzero support of
+    /// [`project`](crate::AtomicScorer::project), which makes `FuzzyKg` its
+    /// own exact [`CandidateSource`](crate::prune::CandidateSource).
+    pub fn tails(&self, anchor: usize, relation: usize) -> Vec<usize> {
+        self.edges
+            .get(&(anchor, relation))
+            .map(|tails| tails.iter().map(|&(t, _)| t).collect())
+            .unwrap_or_default()
+    }
 }
 
 impl AtomicScorer for FuzzyKg {
