@@ -17,10 +17,14 @@ publish = true
 [dependencies]
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
 tranz = { version = "0.6", optional = true }
+# Optional: Query2Box-style scoring over trained box embeddings.
+subsume = { version = "0.14", optional = true }
 
 [features]
 # Enables `adapters::PointModel`, wrapping a `tranz::Scorer`.
 tranz = ["dep:tranz"]
+# Enables `adapters::BoxModel`, Query2Box scoring via `subsume`.
+subsume = ["dep:subsume"]
 
 [dev-dependencies]
 proptest = "1.5"

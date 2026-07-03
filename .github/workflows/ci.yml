@@ -27,10 +27,10 @@ jobs:
         if: matrix.lint
       - run: cargo clippy --all-targets -- -D warnings
         if: matrix.lint
-      - run: cargo clippy --all-targets --features tranz -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
         if: matrix.lint
       - run: cargo test
-      - run: cargo test --features tranz
+      - run: cargo test --all-features
         if: matrix.lint
       - run: cargo doc --no-deps
         if: matrix.lint
