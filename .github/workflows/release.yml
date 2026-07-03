@@ -13,8 +13,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
+      # The check runs BEFORE auth: a locally-published version must skip the
+      # whole publish leg, or crates-io-auth-action fails the run on a repo
+      # with no Trusted Publishing config (cargo has no --idempotent yet:
+      # rust-lang/cargo#13397).
+      - name: Check if version already published
+        id: published
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          count=$(curl -sf https://index.crates.io/he/yt/heyting | jq -r '.vers' | grep -Fxc "$version" || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
+        if: steps.published.outputs.count == '0'
       - run: cargo publish
+        if: steps.published.outputs.count == '0'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
