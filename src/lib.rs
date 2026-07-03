@@ -50,12 +50,14 @@
 #![warn(missing_docs)]
 
 pub mod adapters;
+pub mod conformal;
 pub mod eval;
 pub mod kg;
 pub mod prune;
 pub mod query;
 pub mod truth;
 
+pub use conformal::{answer_set, calibrate, empirical_coverage, ConformalThreshold};
 pub use eval::{hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
 pub use kg::FuzzyKg;
 pub use prune::{answer_query_topk_pruned, CandidateSource};
