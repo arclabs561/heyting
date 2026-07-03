@@ -4,7 +4,7 @@ Complex logical query answering over knowledge graph embeddings.
 
 ```toml
 [dependencies]
-heyting = "0.1"
+heyting = "0.2"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
@@ -65,3 +65,8 @@ not  (dog eats ?) AND NOT (cat eats ?) [Lukasiewicz]  -> plant (0.30)
 `heyting` is the geometry-generic counterpart of `tranz::query` (CQD-Beam over
 point embeddings, Arakelyan et al. 2021): implement `AtomicScorer` for any point
 or region model and the same connectives answer complex queries over it.
+
+The optional `tranz` feature provides `adapters::PointModel`, which wraps a
+trained `tranz::Scorer` (`TransE`/`RotatE`/`ComplEx`/`DistMult`) as an
+`AtomicScorer`, mapping its distance scores to `[0, 1]` degrees so the query
+engine runs over point embeddings directly.

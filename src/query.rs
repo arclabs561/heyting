@@ -47,6 +47,26 @@ impl Default for QueryConfig {
 /// evaluate with [`answer_query`] / [`answer_query_topk`]. The connectives
 /// realize existential positive first-order logic plus negation and the Heyting
 /// implication, each interpreted through the chosen [`Truth`] algebra.
+///
+/// # Two disjunctions
+///
+/// Disjunction appears twice with deliberately different aggregation. An
+/// explicit [`Query::Union`] folds its branches with the algebra's t-conorm
+/// `⊕` ([`Truth::or`]), so under [`crate::Product`] or [`crate::Lukasiewicz`]
+/// it is *not* a plain `max`. The existential over a chain's intermediate
+/// variable ([`Query::Project`]) instead always aggregates with `max` (the
+/// Gödel join), in every algebra, following CQD-Beam. The two therefore differ
+/// outside [`crate::Godel`]: explicit `Union` follows the algebra, the chain
+/// existential follows CQD-Beam.
+///
+/// # Warning
+///
+/// The constructors ([`Query::intersection`], [`Query::union`]) enforce that a
+/// branch list is non-empty, but building the [`Query::Intersection`] /
+/// [`Query::Union`] variants directly bypasses that check. An empty
+/// `Intersection` evaluates to `⊤` (the conjunction's unit) and an empty
+/// `Union` to `⊥` (the disjunction's unit) at every entity; prefer the
+/// constructors.
 #[derive(Debug, Clone)]
 pub enum Query {
     /// Atomic `(entity, relation, ?)`.
@@ -349,5 +369,56 @@ mod tests {
         let q = Query::anchor(3, 0).implies(Query::anchor(4, 0));
         let scores = answer_query::<Godel>(&kg, &q, &cfg);
         assert!((scores[1] - 1.0).abs() < 1e-6, "1.0 → 1.0 = ⊤ at mammal");
+    }
+
+    /// Evaluate `premise → conclusion` at entity 1 where the premise holds to
+    /// degree `p` and the conclusion to degree `c` there. Premise is relation 0
+    /// and conclusion relation 1, both anchored at entity 0, so the two degrees
+    /// are set independently by their edge weights.
+    fn implication_at<T: Truth>(p: f32, c: f32) -> f32 {
+        let mut kg = FuzzyKg::new(2);
+        if p > 0.0 {
+            kg.add_edge(0, 0, 1, p);
+        }
+        if c > 0.0 {
+            kg.add_edge(0, 1, 1, c);
+        }
+        let q = Query::anchor(0, 0).implies(Query::anchor(0, 1));
+        answer_query::<T>(&kg, &q, &QueryConfig::default())[1]
+    }
+
+    #[test]
+    fn implication_is_vacuously_true_when_premise_is_zero() {
+        // Premise 0 ≤ any conclusion, so a → b = ⊤ in every algebra.
+        assert!((implication_at::<Godel>(0.0, 0.7) - 1.0).abs() < 1e-6);
+        assert!((implication_at::<Product>(0.0, 0.7) - 1.0).abs() < 1e-6);
+        assert!((implication_at::<Lukasiewicz>(0.0, 0.7) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn implication_is_top_when_premise_strictly_below_conclusion() {
+        // p < c ⟹ residuum = ⊤ (reflexivity of the order) in every algebra.
+        assert!((implication_at::<Godel>(0.3, 0.8) - 1.0).abs() < 1e-6);
+        assert!((implication_at::<Product>(0.3, 0.8) - 1.0).abs() < 1e-6);
+        assert!((implication_at::<Lukasiewicz>(0.3, 0.8) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn implication_pins_each_algebra_when_premise_exceeds_conclusion() {
+        // p > c is where the three algebras genuinely differ; assert exact
+        // values so a constant-⊤ implementation would fail all three.
+        let (p, c) = (0.8_f32, 0.3_f32);
+        assert!(
+            (implication_at::<Godel>(p, c) - c).abs() < 1e-6,
+            "Godel: a → b = b when a > b"
+        );
+        assert!(
+            (implication_at::<Product>(p, c) - (c / p)).abs() < 1e-6,
+            "Product: a → b = b / a when a > b"
+        );
+        assert!(
+            (implication_at::<Lukasiewicz>(p, c) - (1.0 - p + c)).abs() < 1e-6,
+            "Lukasiewicz: a → b = 1 − a + b"
+        );
     }
 }

@@ -198,6 +198,37 @@ mod tests {
         assert!((T::or(a, b) - T::or(b, a)).abs() < EPS);
     }
 
+    fn check_associativity<T: Truth>(a: f32, b: f32, c: f32) {
+        assert!(
+            (T::and(T::and(a, b), c) - T::and(a, T::and(b, c))).abs() < EPS,
+            "⊗ not associative"
+        );
+        assert!(
+            (T::or(T::or(a, b), c) - T::or(a, T::or(b, c))).abs() < EPS,
+            "⊕ not associative"
+        );
+    }
+
+    fn check_or_identities<T: Truth>(a: f32) {
+        // Dual to ⊗'s unit/annihilator: ⊕ has unit ⊥ and annihilator ⊤.
+        assert!((T::or(a, T::bot()) - a).abs() < EPS, "or unit ⊥ failed");
+        assert!(
+            (T::or(a, T::top()) - T::top()).abs() < EPS,
+            "or annihilator ⊤ failed"
+        );
+    }
+
+    fn check_de_morgan<T: Truth>(a: f32, b: f32) {
+        // ¬(a ⊗ b) = ¬a ⊕ ¬b. Holds for the involutive Łukasiewicz negation,
+        // and — because [0, 1] under any of these t-norms is a chain — for the
+        // crisp Gödel/Product pseudo-complement as well (min/product is 0 iff a
+        // factor is 0, which is exactly when ¬a ⊕ ¬b saturates to ⊤).
+        assert!(
+            (T::neg(T::and(a, b)) - T::or(T::neg(a), T::neg(b))).abs() < EPS,
+            "De Morgan ¬(a ⊗ b) = ¬a ⊕ ¬b failed"
+        );
+    }
+
     fn check_residuation<T: Truth>(a: f32, b: f32, c: f32) {
         // Modus ponens: a ⊗ (a → b) ≤ b.
         assert!(
@@ -223,6 +254,9 @@ mod tests {
         fn godel_is_a_residuated_lattice(a in degree(), b in degree(), c in degree()) {
             check_unit::<Godel>(a);
             check_commutative::<Godel>(a, b);
+            check_associativity::<Godel>(a, b, c);
+            check_or_identities::<Godel>(a);
+            check_de_morgan::<Godel>(a, b);
             check_residuation::<Godel>(a, b, c);
         }
 
@@ -230,6 +264,9 @@ mod tests {
         fn product_is_a_residuated_lattice(a in degree(), b in degree(), c in degree()) {
             check_unit::<Product>(a);
             check_commutative::<Product>(a, b);
+            check_associativity::<Product>(a, b, c);
+            check_or_identities::<Product>(a);
+            check_de_morgan::<Product>(a, b);
             check_residuation::<Product>(a, b, c);
         }
 
@@ -237,6 +274,9 @@ mod tests {
         fn lukasiewicz_is_a_residuated_lattice(a in degree(), b in degree(), c in degree()) {
             check_unit::<Lukasiewicz>(a);
             check_commutative::<Lukasiewicz>(a, b);
+            check_associativity::<Lukasiewicz>(a, b, c);
+            check_or_identities::<Lukasiewicz>(a);
+            check_de_morgan::<Lukasiewicz>(a, b);
             check_residuation::<Lukasiewicz>(a, b, c);
         }
 
