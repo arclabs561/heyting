@@ -4,7 +4,7 @@ Complex logical query answering over knowledge graph embeddings.
 
 ```toml
 [dependencies]
-heyting = "0.2"
+heyting = "0.3"
 ```
 
 Dual-licensed under MIT or Apache-2.0.

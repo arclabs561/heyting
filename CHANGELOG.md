@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0] - 2026-07-03
+
+### Added
+
+- `eval` module: the standard easy/hard answer split (`split_answers`,
+  `crisp_answers`) and filtered ranking metrics over hard answers
+  (`hard_answer_metrics`, `QueryMetrics`). The module doc maps the standard
+  query-shape taxonomy (`1p` through `pni`) to `Query` constructors.
+
+### Fixed
+
+- docs.rs rendering of the `adapters` module doc link on default-feature
+  builds (unresolved `AtomicScorer` link when the `tranz` feature is off).
+
 ## [0.2.0] - 2026-06-29
 
 ### Added
