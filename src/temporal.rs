@@ -37,6 +37,157 @@ use std::collections::HashMap;
 use crate::prune::CandidateSource;
 use crate::query::AtomicScorer;
 
+/// A set of discrete timestamp ids over a fixed axis `0..num_timestamps`.
+///
+/// The carrier for TFLEX-style timestamp-set logic over event KGs (facts
+/// stamped with a day id, as in ICEWS): where [`TimeWindow`] is a predicate
+/// over continuous validity intervals, `TimeSet` is an explicit set, closed
+/// under union, intersection, and complement — which windows are not
+/// (the complement of an interval is two rays, the union of two windows is
+/// non-contiguous). The window vocabulary survives as constructors:
+/// [`before`](Self::before), [`after`](Self::after),
+/// [`between`](Self::between) build the contiguous special cases.
+///
+/// Backed by a bitset; ICEWS14's axis is 365 days, so a set is 6 words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeSet {
+    blocks: Vec<u64>,
+    n: usize,
+}
+
+impl TimeSet {
+    /// The empty set over an axis of `n` timestamps.
+    pub fn empty(n: usize) -> Self {
+        Self {
+            blocks: vec![0; n.div_ceil(64)],
+            n,
+        }
+    }
+
+    /// The full axis `0..n`.
+    pub fn all(n: usize) -> Self {
+        let mut s = Self::empty(n);
+        for t in 0..n {
+            s.insert(t);
+        }
+        s
+    }
+
+    /// Timestamps strictly before `t` (clamped to the axis).
+    pub fn before(t: usize, n: usize) -> Self {
+        let mut s = Self::empty(n);
+        for i in 0..t.min(n) {
+            s.insert(i);
+        }
+        s
+    }
+
+    /// Timestamps strictly after `t`.
+    pub fn after(t: usize, n: usize) -> Self {
+        let mut s = Self::empty(n);
+        for i in t.saturating_add(1)..n {
+            s.insert(i);
+        }
+        s
+    }
+
+    /// Timestamps in `[a, b]` inclusive (clamped to the axis).
+    pub fn between(a: usize, b: usize, n: usize) -> Self {
+        let mut s = Self::empty(n);
+        for i in a..=b.min(n.saturating_sub(1)) {
+            if i < n {
+                s.insert(i);
+            }
+        }
+        s
+    }
+
+    /// The single timestamp `t` (empty if `t` is off-axis).
+    pub fn singleton(t: usize, n: usize) -> Self {
+        let mut s = Self::empty(n);
+        s.insert(t);
+        s
+    }
+
+    /// Axis size this set is defined over.
+    pub fn num_timestamps(&self) -> usize {
+        self.n
+    }
+
+    /// Add a timestamp (ignored if off-axis).
+    pub fn insert(&mut self, t: usize) {
+        if t < self.n {
+            self.blocks[t / 64] |= 1 << (t % 64);
+        }
+    }
+
+    /// Is `t` in the set?
+    pub fn contains(&self, t: usize) -> bool {
+        t < self.n && self.blocks[t / 64] & (1 << (t % 64)) != 0
+    }
+
+    /// Number of timestamps in the set.
+    pub fn len(&self) -> usize {
+        self.blocks.iter().map(|b| b.count_ones() as usize).sum()
+    }
+
+    /// Is the set empty?
+    pub fn is_empty(&self) -> bool {
+        self.blocks.iter().all(|&b| b == 0)
+    }
+
+    /// Set union. Both sets must share the axis.
+    ///
+    /// # Panics
+    /// Panics if the axes differ.
+    pub fn union(&self, other: &Self) -> Self {
+        assert_eq!(self.n, other.n, "TimeSet axes differ");
+        Self {
+            blocks: self
+                .blocks
+                .iter()
+                .zip(&other.blocks)
+                .map(|(a, b)| a | b)
+                .collect(),
+            n: self.n,
+        }
+    }
+
+    /// Set intersection. Both sets must share the axis.
+    ///
+    /// # Panics
+    /// Panics if the axes differ.
+    pub fn intersect(&self, other: &Self) -> Self {
+        assert_eq!(self.n, other.n, "TimeSet axes differ");
+        Self {
+            blocks: self
+                .blocks
+                .iter()
+                .zip(&other.blocks)
+                .map(|(a, b)| a & b)
+                .collect(),
+            n: self.n,
+        }
+    }
+
+    /// Complement within the axis (trailing off-axis bits stay clear).
+    pub fn complement(&self) -> Self {
+        let mut blocks: Vec<u64> = self.blocks.iter().map(|b| !b).collect();
+        let tail = self.n % 64;
+        if tail != 0 {
+            if let Some(last) = blocks.last_mut() {
+                *last &= (1u64 << tail) - 1;
+            }
+        }
+        Self { blocks, n: self.n }
+    }
+
+    /// Iterate the member timestamps in increasing order.
+    pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..self.n).filter(move |&t| self.contains(t))
+    }
+}
+
 /// A predicate over a fact's validity interval `[start, end]`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TimeWindow {
@@ -255,6 +406,55 @@ mod tests {
         kg.add_fact(3, 0, 1, 2005.0, 2009.0, 1.0);
         kg.add_fact(3, 0, 2, 2017.0, 2021.0, 1.0);
         kg
+    }
+
+    /// TimeSet algebra: double complement is identity, De Morgan holds, and
+    /// before/singleton/after partition the axis. Checked on an axis that
+    /// crosses a word boundary (n = 70) so tail masking is exercised.
+    #[test]
+    fn timeset_algebra_laws() {
+        let n = 70;
+        let a = TimeSet::between(3, 40, n);
+        let b = TimeSet::after(25, n);
+
+        assert_eq!(a.complement().complement(), a);
+        assert_eq!(
+            a.union(&b).complement(),
+            a.complement().intersect(&b.complement()),
+            "De Morgan"
+        );
+
+        let t = 33;
+        let partition = TimeSet::before(t, n)
+            .union(&TimeSet::singleton(t, n))
+            .union(&TimeSet::after(t, n));
+        assert_eq!(partition, TimeSet::all(n));
+        assert!(TimeSet::before(t, n)
+            .intersect(&TimeSet::after(t, n))
+            .is_empty());
+
+        // Complement never leaks off-axis bits.
+        assert_eq!(TimeSet::empty(n).complement(), TimeSet::all(n));
+        assert_eq!(TimeSet::all(n).complement().len(), 0);
+    }
+
+    /// The TFLEX non-contiguous cases intervals cannot carry: a complement
+    /// (two rays) and a union of two windows.
+    #[test]
+    fn timeset_represents_non_contiguous_sets() {
+        let n = 100;
+        let mid = TimeSet::between(40, 60, n);
+        let rays = mid.complement();
+        assert!(rays.contains(0) && rays.contains(99));
+        assert!(!rays.contains(50));
+        assert_eq!(rays.len(), 100 - 21);
+
+        let two = TimeSet::between(0, 5, n).union(&TimeSet::between(90, 95, n));
+        assert_eq!(two.len(), 12);
+        assert!(!two.contains(50));
+        let members: Vec<usize> = two.iter().collect();
+        assert_eq!(members[0], 0);
+        assert_eq!(*members.last().unwrap(), 95);
     }
 
     #[test]

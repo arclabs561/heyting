@@ -70,5 +70,5 @@ pub use kg::FuzzyKg;
 pub use provenance::{explain_answer, Witness, WitnessError};
 pub use prune::{answer_query_topk_pruned, CandidateSource};
 pub use query::{answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig};
-pub use temporal::{TemporalKg, TimeWindow};
+pub use temporal::{TemporalKg, TimeSet, TimeWindow};
 pub use truth::{Godel, Idempotent, Lukasiewicz, Product, SelectiveOr, Truth, Viterbi};
