@@ -30,6 +30,10 @@ subsume = ["dep:subsume"]
 name = "fb15k237_clqa"
 required-features = ["tranz"]
 
+[[example]]
+name = "icews14_temporal_clqa"
+required-features = ["tranz"]
+
 [dev-dependencies]
 proptest = "1.5"
 

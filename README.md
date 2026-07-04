@@ -84,7 +84,10 @@ assert_eq!(top[0].0, 1);
 - **Temporal scoping** (`temporal`): facts carry validity intervals; a
   `TimeWindow` (before/after/between, or relative to another fact) registers
   as a virtual relation id, so time-scoped hops compose through the ordinary
-  connectives; planning, pruning, conformal, and witnesses all apply.
+  connectives; planning, pruning, conformal, and witnesses all apply. For
+  event KGs with discrete timestamps, `TimeSet` (a bitset closed under
+  union, intersection, and complement) carries the non-contiguous sets that
+  temporal operators produce; a not-during hop is one virtual relation.
 - **Standard evaluation** (`eval`): the easy/hard answer split with filtered
   metrics, as in the Query2Box/BetaE protocol.
 
@@ -96,7 +99,9 @@ literature); cyclic query graphs are out of scope.
 
 - Feature `tranz`: `adapters::PointModel` wraps a trained `tranz::Scorer`
   (`TransE`/`RotatE`/`ComplEx`/`DistMult`) as an `AtomicScorer`, with a
-  sigmoid temperature for calibrated degrees.
+  sigmoid temperature for calibrated degrees. `adapters::TemporalPointModel`
+  does the same for a trained `tranz::temporal::TComplEx`, with
+  `TimeSet`-scoped hops registered as virtual relations.
 - Feature `subsume`: `adapters::BoxModel` scores Query2Box-style over trained
   box embeddings, and `BoxModel::materialize_explained` runs the query in the
   geometry itself: exact box intersections, DNF unions (a single box cannot
@@ -104,8 +109,12 @@ literature); cyclic query graphs are out of scope.
   Returns the answer region and its composition tree.
 
 `cargo run --release --features tranz --example fb15k237_clqa` runs the
-FB15k-237 example end to end: train a 1p model with the tranz CLI, compose queries here,
-score with the easy/hard protocol, print a witness and conformal coverage.
+FB15k-237 example end to end: train a 1p model with the tranz CLI, compose
+queries here, score with the easy/hard protocol, print a witness and
+conformal coverage. `--example icews14_temporal_clqa` is the temporal
+counterpart on ICEWS14: a trained TComplEx, windowed and not-during query
+types with an exact `TemporalKg` oracle, and conformal coverage over
+windowed hops.
 
 ## Relationship to tranz
 
