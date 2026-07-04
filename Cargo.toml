@@ -26,6 +26,10 @@ tranz = ["dep:tranz"]
 # Enables `adapters::BoxModel`, Query2Box scoring via `subsume`.
 subsume = ["dep:subsume"]
 
+[[example]]
+name = "fb15k237_clqa"
+required-features = ["tranz"]
+
 [dev-dependencies]
 proptest = "1.5"
 
