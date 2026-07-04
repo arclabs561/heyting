@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.9.0] - 2026-07-03
+
+### Added
+
+- `provenance` module: bottleneck witness trees (`explain_answer`) — the
+  why-provenance of a degree-path answer, grounded in provenance semirings
+  (Green et al., PODS 2007). Witness degree equals the engine degree exactly.
+- `truth::Idempotent` marker trait: encodes which algebras are `(min, max)`
+  semirings (Gödel; the classical only-idempotent-t-norm-is-min result), the
+  bound `explain_answer` requires for soundness.
+- `fb15k237_clqa` example (feature `tranz`): end-to-end CLQA evaluation on
+  FB15k-237 with a tranz-trained DistMult — composition, easy/hard metrics,
+  a witness, and conformal coverage in one run — plus a fetch script.
+
+### Changed
+
+- `adapters` split into `point` / `box_model` / `box_dnf` files; public
+  paths unchanged.
+
 ## [0.8.0] - 2026-07-03
 
 ### Added
