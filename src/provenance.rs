@@ -388,39 +388,44 @@ mod tests {
         kg
     }
 
-    /// The soundness invariant: witness degree == dense Gödel degree, across
-    /// every supported shape.
+    /// The soundness invariant: witness degree == dense engine degree, across
+    /// every supported shape, under BOTH SelectiveOr algebras (bottleneck
+    /// witnesses for Gödel, best-product witnesses for Viterbi).
     #[test]
     fn witness_degree_matches_engine_degree() {
-        let kg = kg();
-        let cfg = QueryConfig::default();
-        let queries = [
-            Query::anchor(2, 0),
-            Query::anchor(2, 0).then(0),
-            Query::intersection(vec![Query::anchor(2, 0), Query::anchor(3, 0)]),
-            Query::union(vec![Query::anchor(2, 0), Query::anchor(2, 1)]),
-            Query::intersection(vec![
+        fn check<T: crate::truth::SelectiveOr>(kg: &FuzzyKg, cfg: &QueryConfig, label: &str) {
+            let queries = [
+                Query::anchor(2, 0),
                 Query::anchor(2, 0).then(0),
-                Query::given(vec![0.6; 5]),
-            ]),
-            Query::anchor(2, 0).negate(),
-            Query::anchor(2, 0).implies(Query::anchor(3, 0)),
-        ];
-        for q in &queries {
-            let dense = answer_query::<Godel>(&kg, q, &cfg);
-            for (e, &d) in dense.iter().enumerate() {
-                if d > 0.0 {
-                    let w = explain_answer::<Godel>(&kg, q, &cfg, e)
-                        .expect("witness for nonzero degree");
-                    assert!(
-                        (w.degree() - d).abs() < 1e-6,
-                        "entity {e}: witness {} vs engine {d}\n{}",
-                        w.degree(),
-                        w.render()
-                    );
+                Query::intersection(vec![Query::anchor(2, 0), Query::anchor(3, 0)]),
+                Query::union(vec![Query::anchor(2, 0), Query::anchor(2, 1)]),
+                Query::intersection(vec![
+                    Query::anchor(2, 0).then(0),
+                    Query::given(vec![0.6; 5]),
+                ]),
+                Query::anchor(2, 0).negate(),
+                Query::anchor(2, 0).implies(Query::anchor(3, 0)),
+            ];
+            for q in &queries {
+                let dense = answer_query::<T>(kg, q, cfg);
+                for (e, &d) in dense.iter().enumerate() {
+                    if d > 0.0 {
+                        let w =
+                            explain_answer::<T>(kg, q, cfg, e).expect("witness for nonzero degree");
+                        assert!(
+                            (w.degree() - d).abs() < 1e-6,
+                            "{label} entity {e}: witness {} vs engine {d}\n{}",
+                            w.degree(),
+                            w.render()
+                        );
+                    }
                 }
             }
         }
+        let kg = kg();
+        let cfg = QueryConfig::default();
+        check::<Godel>(&kg, &cfg, "godel");
+        check::<Viterbi>(&kg, &cfg, "viterbi");
     }
 
     /// The 2p witness names the true bottleneck path: dog -is_a-> mammal
