@@ -16,7 +16,8 @@
 //! ## The logic is a typed algebra
 //!
 //! Query degrees live in a *residuated lattice*, and the choice of lattice is a
-//! type parameter ([`Truth`]): [`Godel`] (min), [`Product`], or [`Lukasiewicz`].
+//! type parameter ([`Truth`]): [`Godel`] (min), [`Product`], [`Lukasiewicz`],
+//! or [`Viterbi`] (product with max, the best-derivation semiring).
 //! The lattice's residuum `a → b` is the **Heyting implication** the crate is
 //! named for, exposed both as [`Truth::residuum`] and as the [`Query::Implication`]
 //! connective. Picking the algebra picks the logic with no runtime branch — and
@@ -61,8 +62,10 @@ pub mod temporal;
 pub mod truth;
 
 pub use abduce::{abduce, AbduceConfig, Hypothesis};
-pub use conformal::{answer_set, calibrate, empirical_coverage, ConformalThreshold};
-pub use eval::{hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
+pub use conformal::{
+    answer_set, calibrate, empirical_coverage, ConformalError, ConformalThreshold,
+};
+pub use eval::{crisp_answers, hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
 pub use kg::FuzzyKg;
 pub use provenance::{explain_answer, Witness, WitnessError};
 pub use prune::{answer_query_topk_pruned, CandidateSource};

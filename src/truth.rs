@@ -53,8 +53,9 @@
 //! degree under them genuinely *aggregates across derivations* (the same
 //! fact reached through two branches raises the answer), which is
 //! how-provenance counting leaking into the degree, not a bug. The
-//! [`Idempotent`] marker encodes the Gödel side of this line for APIs
-//! (like [`crate::provenance`]) whose soundness needs it.
+//! [`SelectiveOr`] marker encodes the semiring side of this line;
+//! [`crate::provenance`]'s soundness is bounded by it. [`Idempotent`]
+//! additionally marks the both-ops-idempotent case (Gödel alone).
 
 /// A residuated lattice of truth degrees on `[0, 1]`.
 ///
@@ -133,12 +134,11 @@ impl SelectiveOr for Viterbi {}
 /// By the classical t-norm result (Klement, Mesiar & Pap, *Triangular
 /// Norms*), the only idempotent t-norm is `min` and the only idempotent
 /// t-conorm is `max` — so an `Idempotent` algebra IS `(min, max)`, i.e. the
-/// fuzzy semiring of Green et al. (see the module docs). Two consequences
-/// APIs rely on: evaluation is a semiring computation (provenance machinery
-/// applies), and every answer degree is realized by a single bottleneck
-/// derivation, which is what makes [`crate::provenance`]'s witness trees
-/// exact. Implemented by [`Godel`] alone; implementing it for a
-/// non-`(min, max)` algebra breaks those guarantees.
+/// fuzzy semiring of Green et al. (see the module docs), where every answer
+/// degree is a single bottleneck derivation. Purely descriptive today: no
+/// API bounds on it ([`crate::provenance`] is bounded by the weaker
+/// [`SelectiveOr`], which Viterbi also satisfies). Implemented by [`Godel`]
+/// alone — by the cited uniqueness result nothing else lawfully can be.
 pub trait Idempotent: SelectiveOr {}
 
 impl Idempotent for Godel {}
