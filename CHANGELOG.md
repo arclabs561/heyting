@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0] - 2026-07-03
+
+### Added
+
+- `temporal` module: `TemporalKg` (facts with validity intervals) and
+  `TimeWindow` (before / after / between). A window registered on the graph
+  becomes a virtual relation id, so time-scoped hops compose through the
+  ordinary query connectives, and planning, pruning, and conformal
+  calibration apply to temporal queries unchanged. Ships with the
+  `temporal_query` example (the two-non-adjacent-terms query).
+
 ## [0.6.0] - 2026-07-03
 
 ### Added
