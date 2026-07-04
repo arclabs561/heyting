@@ -10,11 +10,14 @@
 //! conformal answer-set coverage calibrated on the valid split.
 //!
 //! Queries are generated deterministically from the dataset splits (first-N
-//! satisfying each shape), not sampled, so runs are reproducible. Compare
-//! per-type MRR against CQD (arXiv:2011.03459) and QTO (ICML 2023) tables —
-//! same protocol, though their query files (from BetaE) differ from these
-//! generated ones, so treat the comparison as a sanity anchor, not a
-//! leaderboard entry.
+//! satisfying each shape), not sampled, so runs are reproducible, and each
+//! composite type comes in two classes: REDUCIBLE (exactly one atom needs a
+//! held-out edge; the rest are train-traversable — the class that
+//! arXiv:2410.12537 shows collapses to plain link prediction) and
+//! NON-REDUCIBLE (every atom needs a held-out edge). The gap between the two
+//! columns is the honest measure of multi-hop composition; compare against
+//! CQD (arXiv:2011.03459), QTO (ICML 2023), and the ICLR 2025 critique's
+//! tables as sanity anchors, not leaderboard entries (query files differ).
 //!
 //! Data-gated: needs `data/Release/{train,valid,test}.txt` (FB15k-237) and
 //! `data/fb15k237-distmult/{entities,relations}.tsv` (run
@@ -104,11 +107,19 @@ fn main() {
     for &(h, r, t) in &train {
         in_train.entry(t).or_default().push((h, r));
     }
+    // Held-out (valid ∪ test) in-edges, for the non-reducible class.
+    let mut in_heldout: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
+    for &(h, r, t) in valid.iter().chain(test.iter()) {
+        in_heldout.entry(t).or_default().push((h, r));
+    }
     let mut queries: Vec<(&'static str, Vec<Query>)> = vec![
         ("1p", vec![]),
         ("2p", vec![]),
         ("2i", vec![]),
         ("3i", vec![]),
+        ("2p!", vec![]), // ! = non-reducible: every atom needs prediction
+        ("2i!", vec![]),
+        ("3i!", vec![]),
     ];
     let mut seen: std::collections::HashSet<(usize, usize, usize, usize)> =
         std::collections::HashSet::new();
@@ -145,6 +156,43 @@ fn main() {
                 if let (Some(&(h2, r2)), Some(&(h3, r3))) = (it.next(), it.next()) {
                     if seen.insert((3, h, r2.min(r3), r2.max(r3))) {
                         queries[3].1.push(Query::intersection(vec![
+                            Query::anchor(h, r),
+                            Query::anchor(h2, r2),
+                            Query::anchor(h3, r3),
+                        ]));
+                    }
+                }
+            }
+        }
+        // Non-reducible variants: every atom's edge is held out, so no
+        // single-link shortcut exists (arXiv:2410.12537's hard class).
+        if queries[4].1.len() < PER_TYPE {
+            // Both hops held out: (h2, r1, h) ∈ valid∪test, (h, r, t) ∈ test.
+            if let Some(&(h2, r1)) = in_heldout.get(&h).and_then(|v| v.first()) {
+                if seen.insert((4, h2, r1, r)) {
+                    queries[4].1.push(Query::anchor(h2, r1).then(r));
+                }
+            }
+        }
+        if queries[5].1.len() < PER_TYPE {
+            if let Some(&(h2, r2)) = in_heldout
+                .get(&t)
+                .and_then(|v| v.iter().find(|&&(h2, _)| h2 != h))
+            {
+                if seen.insert((5, h, r, r2)) {
+                    queries[5].1.push(Query::intersection(vec![
+                        Query::anchor(h, r),
+                        Query::anchor(h2, r2),
+                    ]));
+                }
+            }
+        }
+        if queries[6].1.len() < PER_TYPE {
+            if let Some(edges) = in_heldout.get(&t) {
+                let mut it = edges.iter().filter(|&&(h2, _)| h2 != h);
+                if let (Some(&(h2, r2)), Some(&(h3, r3))) = (it.next(), it.next()) {
+                    if seen.insert((6, h, r2.min(r3), r2.max(r3))) {
+                        queries[6].1.push(Query::intersection(vec![
                             Query::anchor(h, r),
                             Query::anchor(h2, r2),
                             Query::anchor(h3, r3),
@@ -193,8 +241,11 @@ fn main() {
         );
     }
     println!(
-        "\ncompare per-type MRR against CQD (arXiv:2011.03459) and QTO (ICML 2023)\n\
-         FB15k-237 tables; protocol matches (hard answers, filtered), query files differ."
+        "\n! types are non-reducible (every atom needs a held-out edge; no\n\
+         single-link shortcut). The drop from plain to ! types reproduces the\n\
+         ICLR 2025 finding (arXiv:2410.12537) that reducible benchmark queries\n\
+         overstate multi-hop composition. Compare plain types against CQD\n\
+         (arXiv:2011.03459) / QTO (ICML 2023); protocol matches, files differ."
     );
 
     // The rest of the stack on the same model. Witness: why is the top hard
