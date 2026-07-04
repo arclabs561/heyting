@@ -26,9 +26,12 @@
 //! `data/icews14-tcomplex/{entities,relations,times}.tsv`. Run
 //! `scripts/fetch_icews14.sh`, then in ../tranz:
 //! `cargo run --release --features "burn-ndarray,burn-wgpu" --bin tranz --
-//!  train-temporal --data ../heyting/data/icews14 --dim 256 --epochs 40
-//!  --batch-size 1024 --lr 0.003 --label-smoothing 0.1
-//!  --output ../heyting/data/icews14-tcomplex`.
+//!  train-temporal --data ../heyting/data/icews14 --dim 256 --epochs 100
+//!  --batch-size 1024 --lr 0.01 --init-scale 0.01 --label-smoothing 0.1
+//!  --n3-reg 0.0025 --time-smooth 1.0
+//!  --output ../heyting/data/icews14-tcomplex`
+//! (the Lacroix et al. regularizers are worth ~0.18 link-prediction MRR
+//! here; keep `--init-scale 0.01` with them, see tranz's changelog).
 //! Without them this prints instructions and exits 0.
 //!
 //! Run: cargo run --release --features tranz --example icews14_temporal_clqa
@@ -68,7 +71,8 @@ fn main() {
         eprintln!("1. scripts/fetch_icews14.sh");
         eprintln!("2. in ../tranz: cargo run --release --features \"burn-ndarray,burn-wgpu\" \\");
         eprintln!("   --bin tranz -- train-temporal --data ../heyting/{DATA} --dim 256 \\");
-        eprintln!("   --epochs 40 --batch-size 1024 --lr 0.003 --label-smoothing 0.1 \\");
+        eprintln!("   --epochs 100 --batch-size 1024 --lr 0.01 --init-scale 0.01 \\");
+        eprintln!("   --label-smoothing 0.1 --n3-reg 0.0025 --time-smooth 1.0 \\");
         eprintln!("   --output ../heyting/{EMB}");
         return; // data-gated no-op.
     };
