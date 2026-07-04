@@ -1,0 +1,269 @@
+//! Temporal knowledge graphs: time-scoped hops for the query engine.
+//!
+//! Facts in a temporal KG carry a validity interval (`president_of` from
+//! 1993 to 2001; a point event has `start == end`). The complex-query
+//! literature scopes hops with temporal operators — before, after, between
+//! (TFLEX; and interval-native embeddings like HGE use Allen-style interval
+//! relations). This module makes those operators available to the existing
+//! engine without touching it: a [`TimeWindow`] is registered against a base
+//! relation on the [`TemporalKg`], which returns a **virtual relation id**;
+//! a hop through that id scores only the facts whose validity interval
+//! satisfies the window. Time-scoped queries are then ordinary [`Query`]
+//! DAGs, so intersection planning, candidate pruning
+//! ([`CandidateSource`]), conformal
+//! calibration, and the easy/hard evaluation split all apply to temporal
+//! queries with no new machinery.
+//!
+//! The classic query this enables — "who held office before τ AND after τ'"
+//! (an entity with two non-adjacent terms) — is an ordinary
+//! [`Query::intersection`] of two hops through differently-windowed virtual
+//! relations; see `examples/temporal_query.rs`.
+//!
+//! Windows are crisp (a fact either satisfies the window or not; degrees
+//! come from the fact's weight). Soft window boundaries are a scorer-side
+//! refinement, same as soft literal ramps for [`Query::given`].
+//!
+//! [`Query`]: crate::Query
+//! [`Query::given`]: crate::Query::given
+//! [`Query::intersection`]: crate::Query::intersection
+
+use std::collections::HashMap;
+
+use crate::prune::CandidateSource;
+use crate::query::AtomicScorer;
+
+/// A predicate over a fact's validity interval `[start, end]`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TimeWindow {
+    /// The fact ended strictly before `t`.
+    Before(f64),
+    /// The fact started strictly after `t`.
+    After(f64),
+    /// The fact's validity intersects `[a, b]` (inclusive).
+    Between(f64, f64),
+    /// No temporal constraint (the base relation's plain semantics).
+    AnyTime,
+}
+
+/// One weighted fact tail with its validity interval.
+#[derive(Debug, Clone, Copy)]
+struct Fact {
+    tail: usize,
+    start: f64,
+    end: f64,
+    weight: f32,
+}
+
+impl TimeWindow {
+    /// Does a fact valid over `[start, end]` satisfy this window?
+    pub fn admits(&self, start: f64, end: f64) -> bool {
+        match *self {
+            TimeWindow::Before(t) => end < t,
+            TimeWindow::After(t) => start > t,
+            TimeWindow::Between(a, b) => start <= b && end >= a,
+            TimeWindow::AnyTime => true,
+        }
+    }
+}
+
+/// A fuzzy temporal knowledge graph: weighted facts with validity intervals,
+/// plus a registry of time-windowed virtual relations.
+///
+/// Base relations occupy ids `0..n_relations`; [`windowed`](Self::windowed)
+/// registers `(base relation, window)` pairs at fresh ids beyond them. Both
+/// kinds evaluate through the [`AtomicScorer`] impl (a base relation is
+/// [`TimeWindow::AnyTime`]), and the [`CandidateSource`] impl proposes the
+/// exact tails of each (possibly windowed) hop, so the pruned path is exact
+/// on this graph.
+#[derive(Debug, Clone, Default)]
+pub struct TemporalKg {
+    n_entities: usize,
+    n_relations: usize,
+    /// Facts keyed by `(head, base relation)`.
+    facts: HashMap<(usize, usize), Vec<Fact>>,
+    /// Virtual relation registry, indexed by `id - n_relations`.
+    windows: Vec<(usize, TimeWindow)>,
+}
+
+impl TemporalKg {
+    /// An empty graph over `n_entities` entities and `n_relations` base
+    /// relations (ids `0..n_relations`).
+    pub fn new(n_entities: usize, n_relations: usize) -> Self {
+        Self {
+            n_entities,
+            n_relations,
+            facts: HashMap::new(),
+            windows: Vec::new(),
+        }
+    }
+
+    /// Add a fact `(head, relation, tail)` valid over `[start, end]` with
+    /// membership `weight` (clamped to `[0, 1]`). Out-of-range entity or
+    /// relation ids are ignored; a reversed interval is normalized.
+    pub fn add_fact(
+        &mut self,
+        head: usize,
+        relation: usize,
+        tail: usize,
+        start: f64,
+        end: f64,
+        weight: f32,
+    ) {
+        if head >= self.n_entities || tail >= self.n_entities || relation >= self.n_relations {
+            return;
+        }
+        let (start, end) = if start <= end {
+            (start, end)
+        } else {
+            (end, start)
+        };
+        self.facts.entry((head, relation)).or_default().push(Fact {
+            tail,
+            start,
+            end,
+            weight: weight.clamp(0.0, 1.0),
+        });
+    }
+
+    /// Register a time-scoped view of `relation` and return its virtual
+    /// relation id, usable anywhere a relation id goes
+    /// ([`Query::anchor`](crate::Query::anchor), `then`, candidates).
+    /// Returns `None` if `relation` is not a base relation.
+    pub fn windowed(&mut self, relation: usize, window: TimeWindow) -> Option<usize> {
+        if relation >= self.n_relations {
+            return None;
+        }
+        self.windows.push((relation, window));
+        Some(self.n_relations + self.windows.len() - 1)
+    }
+
+    /// Resolve a (possibly virtual) relation id to `(base, window)`.
+    fn resolve(&self, relation: usize) -> Option<(usize, TimeWindow)> {
+        if relation < self.n_relations {
+            Some((relation, TimeWindow::AnyTime))
+        } else {
+            self.windows.get(relation - self.n_relations).copied()
+        }
+    }
+
+    /// Facts for `(anchor, relation)` admitted by the id's window.
+    fn admitted(&self, anchor: usize, relation: usize) -> impl Iterator<Item = (usize, f32)> + '_ {
+        self.resolve(relation)
+            .into_iter()
+            .flat_map(move |(base, window)| {
+                self.facts
+                    .get(&(anchor, base))
+                    .into_iter()
+                    .flatten()
+                    .filter(move |f| window.admits(f.start, f.end))
+                    .map(|f| (f.tail, f.weight))
+            })
+    }
+}
+
+impl AtomicScorer for TemporalKg {
+    fn num_entities(&self) -> usize {
+        self.n_entities
+    }
+
+    fn project(&self, anchor: usize, relation: usize) -> Vec<f32> {
+        let mut scores = vec![0.0_f32; self.n_entities];
+        for (t, w) in self.admitted(anchor, relation) {
+            if t < self.n_entities && w > scores[t] {
+                scores[t] = w; // parallel facts take the max, as in FuzzyKg.
+            }
+        }
+        scores
+    }
+}
+
+impl CandidateSource for TemporalKg {
+    fn candidates(&self, anchor: usize, relation: usize) -> Option<Vec<usize>> {
+        Some(self.admitted(anchor, relation).map(|(t, _)| t).collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::query::{answer_query, answer_query_topk};
+    use crate::{answer_query_topk_pruned, Godel, Query, QueryConfig};
+
+    /// Entities: 0=alice 1=bob 2=carol 3=office. Relation 0 = holds(office).
+    /// alice: one term [1993, 2001]. bob: two terms [1985, 1989] and
+    /// [2005, 2009]. carol: one term [2017, 2021].
+    fn kg() -> TemporalKg {
+        let mut kg = TemporalKg::new(4, 1);
+        kg.add_fact(3, 0, 0, 1993.0, 2001.0, 1.0);
+        kg.add_fact(3, 0, 1, 1985.0, 1989.0, 1.0);
+        kg.add_fact(3, 0, 1, 2005.0, 2009.0, 1.0);
+        kg.add_fact(3, 0, 2, 2017.0, 2021.0, 1.0);
+        kg
+    }
+
+    #[test]
+    fn windows_admit_by_interval() {
+        assert!(TimeWindow::Before(1990.0).admits(1985.0, 1989.0));
+        assert!(!TimeWindow::Before(1989.0).admits(1985.0, 1989.0)); // strict
+        assert!(TimeWindow::After(2004.0).admits(2005.0, 2009.0));
+        assert!(!TimeWindow::After(2005.0).admits(2005.0, 2009.0)); // strict
+        assert!(TimeWindow::Between(2000.0, 2006.0).admits(2005.0, 2009.0));
+        assert!(TimeWindow::Between(2000.0, 2006.0).admits(1993.0, 2001.0));
+        assert!(!TimeWindow::Between(2010.0, 2012.0).admits(2005.0, 2009.0));
+    }
+
+    /// Hand-oracle: "held the office before 1990" admits only bob's first
+    /// term; "after 2010" only carol's.
+    #[test]
+    fn windowed_hops_scope_answers() {
+        let mut kg = kg();
+        let before_1990 = kg.windowed(0, TimeWindow::Before(1990.0)).unwrap();
+        let after_2010 = kg.windowed(0, TimeWindow::After(2010.0)).unwrap();
+        let cfg = QueryConfig::default();
+
+        let s = answer_query::<Godel>(&kg, &Query::anchor(3, before_1990), &cfg);
+        assert_eq!(s, vec![0.0, 1.0, 0.0, 0.0]);
+
+        let s = answer_query::<Godel>(&kg, &Query::anchor(3, after_2010), &cfg);
+        assert_eq!(s, vec![0.0, 0.0, 1.0, 0.0]);
+
+        // The base relation is unconstrained: everyone who ever held it.
+        let s = answer_query::<Godel>(&kg, &Query::anchor(3, 0), &cfg);
+        assert_eq!(s, vec![1.0, 1.0, 1.0, 0.0]);
+    }
+
+    /// The TFLEX-motivating query: held office before 1990 AND after 2000 —
+    /// two non-adjacent terms. Only bob qualifies, via an ordinary
+    /// intersection of two windowed hops.
+    #[test]
+    fn two_terms_query_is_an_ordinary_intersection() {
+        let mut kg = kg();
+        let before_1990 = kg.windowed(0, TimeWindow::Before(1990.0)).unwrap();
+        let after_2000 = kg.windowed(0, TimeWindow::After(2000.0)).unwrap();
+        let cfg = QueryConfig::default();
+
+        let q = Query::intersection(vec![
+            Query::anchor(3, before_1990),
+            Query::anchor(3, after_2000),
+        ]);
+        let top = answer_query_topk::<Godel>(&kg, &q, &cfg, 4);
+        assert_eq!(top.first(), Some(&(1, 1.0)));
+        assert!(top.iter().skip(1).all(|(_, d)| *d == 0.0));
+
+        // And the pruned path agrees: TemporalKg is its own exact candidate
+        // source, windows included.
+        let pruned = answer_query_topk_pruned::<Godel>(&kg, &kg, &q, &cfg, 4);
+        assert_eq!(pruned, vec![(1, 1.0)]);
+    }
+
+    /// Unknown virtual ids and out-of-range base ids score nothing.
+    #[test]
+    fn unresolved_relations_score_zero() {
+        let kg = kg();
+        let cfg = QueryConfig::default();
+        let s = answer_query::<Godel>(&kg, &Query::anchor(3, 99), &cfg);
+        assert!(s.iter().all(|&d| d == 0.0));
+        let mut kg2 = kg.clone();
+        assert_eq!(kg2.windowed(7, TimeWindow::AnyTime), None);
+    }
+}
