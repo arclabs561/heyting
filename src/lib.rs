@@ -49,6 +49,7 @@
 
 #![warn(missing_docs)]
 
+pub mod abduce;
 pub mod adapters;
 pub mod conformal;
 pub mod eval;
@@ -59,6 +60,7 @@ pub mod query;
 pub mod temporal;
 pub mod truth;
 
+pub use abduce::{abduce, AbduceConfig, Hypothesis};
 pub use conformal::{answer_set, calibrate, empirical_coverage, ConformalThreshold};
 pub use eval::{hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
 pub use kg::FuzzyKg;
