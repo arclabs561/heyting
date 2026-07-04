@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0] - 2026-07-03
+
+### Added
+
+- `Viterbi` truth algebra (product t-norm, `max` t-conorm): the classical
+  best-derivation semiring; chains propagate magnitude and stay witnessable.
+- `truth::SelectiveOr` marker (selective `⊕` = `max`): the actual soundness
+  condition for witnesses; `Idempotent` is now its subtrait, and
+  `explain_answer` is bounded by `SelectiveOr` (Gödel or Viterbi).
+- Witnesses cover negation and implication via `Witness::Refutation` and
+  `Witness::Implied` markers; `WitnessError::UnsupportedConnective` removed.
+- `PointModel::with_temperature`: sigmoid temperature (rankings invariant;
+  fixes saturated degrees for conformal thresholds). `PointModel` is now a
+  named struct built with `PointModel::new`.
+- `TemporalKg::fact_interval` + `windowed_after_fact` / `windowed_before_fact`
+  / `windowed_during_fact`: event-relative time windows.
+
 ## [0.9.0] - 2026-07-03
 
 ### Added
