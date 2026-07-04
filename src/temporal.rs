@@ -33,10 +33,12 @@
 //! [`TimeSet::before_all`] is `{t' < min(S)}`, [`TimeSet::between_all`]
 //! their intersection) — while TFLEX itself approximates these semantics
 //! with fuzzy neural embeddings. The trained counterpart of this module is
-//! `adapters::TemporalPointModel` (feature `tranz`). Not covered:
-//! timestamp-ANSWERING queries (TFLEX's time projection, "when did X r
-//! Y"), which need a second answer sort; the scorer-side seam for them is
-//! `tranz::temporal::TemporalScorer::score_all_times`.
+//! `adapters::TemporalPointModel` (feature `tranz`), whose `when` method
+//! is TFLEX's time projection restricted to concrete anchors ("when did X
+//! r Y" as degrees over the axis; [`TimeSet::from_degrees`] carries the
+//! answer back into set logic). Not covered: set-to-set time projection
+//! and timestamp-valued query variables, which need a second answer sort
+//! in the engine.
 //!
 //! [`Query`]: crate::Query
 //! [`Query::given`]: crate::Query::given
@@ -228,6 +230,20 @@ impl TimeSet {
     /// Panics if the axes differ.
     pub fn between_all(a: &Self, b: &Self) -> Self {
         a.after_all().intersect(&b.before_all())
+    }
+
+    /// Crisp extraction from a timestamp degree vector: the set of ids
+    /// whose degree is at least `threshold`. The bridge from a scored time
+    /// projection (`TemporalPointModel::when`) back into set logic, so a
+    /// predicted event time can anchor After/Before/Between hops.
+    pub fn from_degrees(degrees: &[f32], threshold: f32) -> Self {
+        let mut s = Self::empty(degrees.len());
+        for (t, &d) in degrees.iter().enumerate() {
+            if d >= threshold {
+                s.insert(t);
+            }
+        }
+        s
     }
 }
 
@@ -505,6 +521,16 @@ mod tests {
         // Empty premises admit nothing.
         assert!(TimeSet::empty(n).after_all().is_empty());
         assert!(TimeSet::empty(n).before_all().is_empty());
+    }
+
+    /// Degree extraction thresholds inclusively and takes its axis from
+    /// the vector length.
+    #[test]
+    fn from_degrees_thresholds() {
+        let s = TimeSet::from_degrees(&[0.1, 0.5, 0.9, 0.5], 0.5);
+        assert_eq!(s.num_timestamps(), 4);
+        assert_eq!(s.iter().collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert!(TimeSet::from_degrees(&[], 0.5).is_empty());
     }
 
     /// The TFLEX non-contiguous cases intervals cannot carry: a complement

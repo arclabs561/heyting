@@ -70,6 +70,26 @@ impl<S: tranz::temporal::TemporalScorer> TemporalPointModel<S> {
             self.virtuals.get(relation - n).cloned()
         }
     }
+
+    /// Time projection for a concrete fact pair: degrees over the
+    /// timestamp axis for "when does `(head, relation, tail)` hold?"
+    /// (TFLEX's time-projection operator, restricted to concrete anchors).
+    /// Same sigmoid-temperature map as entity hops. Compose the result
+    /// back into set logic via [`TimeSet::from_degrees`], then
+    /// [`TimeSet::after_all`] / [`TimeSet::before_all`] for event-relative
+    /// windows over a predicted (rather than known) event time. Out-of-range
+    /// ids give all-zero degrees.
+    pub fn when(&self, head: usize, relation: usize, tail: usize) -> Vec<f32> {
+        let n = self.model.num_entities();
+        if head >= n || tail >= n || relation >= self.model.num_relations() {
+            return vec![0.0; self.model.num_timestamps()];
+        }
+        self.model
+            .score_all_times(head, relation, tail)
+            .iter()
+            .map(|&e| sigmoid(-e / self.temperature))
+            .collect()
+    }
 }
 
 impl<S: tranz::temporal::TemporalScorer> AtomicScorer for TemporalPointModel<S> {
@@ -192,6 +212,29 @@ mod tests {
         assert!(m.project(0, empty).iter().all(|&d| d == 0.0));
         assert!(m.project(0, 99).iter().all(|&d| d == 0.0), "unknown id");
         assert!(m.project(99, 0).iter().all(|&d| d == 0.0), "bad anchor");
+    }
+
+    /// Time projection peaks at the planted timestamp, and its extraction
+    /// anchors an event-relative hop: "what does 0 reach AFTER the time
+    /// (0, r, 1) held" admits only the τ=3 fact — TFLEX's Figure-1 shape,
+    /// symbolically.
+    #[test]
+    fn when_composes_into_event_relative_hops() {
+        let mut m = TemporalPointModel::new(Planted);
+        let when = m.when(0, 0, 1);
+        assert_eq!(when.len(), 4);
+        assert!(when[1] > 0.99, "planted at τ=1: {when:?}");
+        assert!(when.iter().enumerate().all(|(t, &d)| t == 1 || d < 0.01));
+
+        let event = TimeSet::from_degrees(&when, 0.5);
+        let after_event = m.windowed(0, event.after_all()).unwrap();
+        let s = m.project(0, after_event);
+        assert!(s[2] > 0.99, "the τ=3 fact is after the event: {s:?}");
+        assert!(s[1] < 0.01, "the event fact itself is not: {s:?}");
+
+        // Out-of-range ids are all-zero, matching project's convention.
+        assert!(m.when(9, 0, 1).iter().all(|&d| d == 0.0));
+        assert!(m.when(0, 9, 1).iter().all(|&d| d == 0.0));
     }
 
     #[test]

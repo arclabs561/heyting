@@ -334,6 +334,37 @@ fn main() {
         }
     }
 
+    // Time projection composed into an event-relative hop (the TFLEX
+    // Figure-1 shape, symbolically): predict WHEN the first test fact held,
+    // then hop through the same relation AFTER the predicted time. On a
+    // scratch adapter: registrations here must not desynchronize the shared
+    // virtual-id sequence (the oracle-parity assert catches it).
+    if let Some(&(h, r, t, tau)) = test.first() {
+        let mut probe = TemporalPointModel::with_temperature(model.model.clone(), 5.0);
+        let when = probe.when(h, r, t);
+        let peak = when.iter().cloned().fold(0.0_f32, f32::max);
+        let mut days: Vec<usize> = (0..n_time).collect();
+        days.sort_by(|&a, &b| when[b].partial_cmp(&when[a]).unwrap());
+        println!(
+            "\ntime projection: when did ({}, {}, {}) hold?",
+            ent_names[h], rel_names[r], ent_names[t]
+        );
+        println!(
+            "  predicted top days: {} {} {} (true: {})",
+            times[days[0]], times[days[1]], times[days[2]], times[tau]
+        );
+        let event = TimeSet::from_degrees(&when, peak * 0.9);
+        if let Some(after_id) = probe.windowed(r, event.after_all()) {
+            let mut s: Vec<(usize, f32)> =
+                probe.project(h, after_id).into_iter().enumerate().collect();
+            s.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            println!(
+                "  after the predicted event, {} {} -> {} / {} / {}",
+                ent_names[h], rel_names[r], ent_names[s[0].0], ent_names[s[1].0], ent_names[s[2].0]
+            );
+        }
+    }
+
     // Conformal coverage on windowed 1p: calibrate on valid, cover on test.
     let mut windowed_pairs = |quads: &[Quad],
                               m: &mut TemporalPointModel<tranz::temporal::TComplEx>,

@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `TemporalPointModel::when`: time projection for a concrete fact pair
+  (degrees over the timestamp axis for "when does `(h, r, t)` hold"),
+  TFLEX's time-projection operator restricted to concrete anchors, and
+  `TimeSet::from_degrees` to carry the answer back into set logic, so a
+  PREDICTED event time can anchor After/Before/Between hops. Requires
+  `tranz >= 0.7.1` (the `score_all_times` seam).
+
 ## [0.12.0] - 2026-07-04
 
 ### Added
