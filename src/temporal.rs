@@ -21,7 +21,12 @@
 //!
 //! Windows are crisp (a fact either satisfies the window or not; degrees
 //! come from the fact's weight). Soft window boundaries are a scorer-side
-//! refinement, same as soft literal ramps for [`Query::given`].
+//! refinement, same as soft literal ramps for [`Query::given`]. Windows can
+//! also be anchored to another fact's validity interval — TFLEX's
+//! event-relative before/after/during operators — via
+//! [`TemporalKg::windowed_after_fact`] and siblings; the full TFLEX design
+//! (fuzzy sets over a timestamp sort, jointly with the entity sort) remains
+//! out of scope until a temporal scorer exists to demand it.
 //!
 //! [`Query`]: crate::Query
 //! [`Query::given`]: crate::Query::given
@@ -161,6 +166,57 @@ impl TemporalKg {
     }
 }
 
+impl TemporalKg {
+    /// The validity hull of the facts `(head, relation, tail)`: the earliest
+    /// start and latest end over matching facts, or `None` when no such fact
+    /// exists. The anchor for event-relative windows.
+    pub fn fact_interval(&self, head: usize, relation: usize, tail: usize) -> Option<(f64, f64)> {
+        let facts = self.facts.get(&(head, relation))?;
+        let mut hull: Option<(f64, f64)> = None;
+        for f in facts.iter().filter(|f| f.tail == tail) {
+            hull = Some(match hull {
+                None => (f.start, f.end),
+                Some((s, e)) => (s.min(f.start), e.max(f.end)),
+            });
+        }
+        hull
+    }
+
+    /// Register `relation` scoped to strictly after the referenced fact's
+    /// validity (TFLEX's after-event operator). `None` if the relation or
+    /// the fact is unknown.
+    pub fn windowed_after_fact(
+        &mut self,
+        relation: usize,
+        event: (usize, usize, usize),
+    ) -> Option<usize> {
+        let (_, end) = self.fact_interval(event.0, event.1, event.2)?;
+        self.windowed(relation, TimeWindow::After(end))
+    }
+
+    /// Register `relation` scoped to strictly before the referenced fact's
+    /// validity (the before-event operator).
+    pub fn windowed_before_fact(
+        &mut self,
+        relation: usize,
+        event: (usize, usize, usize),
+    ) -> Option<usize> {
+        let (start, _) = self.fact_interval(event.0, event.1, event.2)?;
+        self.windowed(relation, TimeWindow::Before(start))
+    }
+
+    /// Register `relation` scoped to overlap the referenced fact's validity
+    /// (the during-event operator).
+    pub fn windowed_during_fact(
+        &mut self,
+        relation: usize,
+        event: (usize, usize, usize),
+    ) -> Option<usize> {
+        let (start, end) = self.fact_interval(event.0, event.1, event.2)?;
+        self.windowed(relation, TimeWindow::Between(start, end))
+    }
+}
+
 impl AtomicScorer for TemporalKg {
     fn num_entities(&self) -> usize {
         self.n_entities
@@ -254,6 +310,24 @@ mod tests {
         // source, windows included.
         let pruned = answer_query_topk_pruned::<Godel>(&kg, &kg, &q, &cfg, 4);
         assert_eq!(pruned, vec![(1, 1.0)]);
+    }
+
+    /// Event-relative windows: "held the office after bob's FIRST term"
+    /// admits alice (1993-2001) and carol but the window anchored to bob's
+    /// hull (1985..2009) admits only carol.
+    #[test]
+    fn event_relative_windows_resolve_fact_hulls() {
+        let mut kg = kg();
+        // bob's hull spans both terms: [1985, 2009].
+        assert_eq!(kg.fact_interval(3, 0, 1), Some((1985.0, 2009.0)));
+        let after_bob = kg.windowed_after_fact(0, (3, 0, 1)).unwrap();
+        let s = answer_query::<Godel>(&kg, &Query::anchor(3, after_bob), &cfg_default());
+        assert_eq!(s, vec![0.0, 0.0, 1.0, 0.0], "only carol is after 2009");
+        assert_eq!(kg.clone().windowed_after_fact(0, (3, 0, 9)), None);
+    }
+
+    fn cfg_default() -> QueryConfig {
+        QueryConfig::default()
     }
 
     /// Unknown virtual ids and out-of-range base ids score nothing.

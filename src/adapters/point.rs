@@ -6,7 +6,11 @@ use crate::query::AtomicScorer;
 ///
 /// `tranz` scores are distances or negative similarities where **lower means
 /// more likely**; this maps them to `[0, 1]` membership degrees via
-/// `sigmoid(-score)`, so the query engine sees calibrated degrees.
+/// `sigmoid(-score / temperature)`. Trained 1-N models produce large-margin
+/// scores that saturate a plain sigmoid (fine for ranking, degenerate for
+/// calibrated degrees and conformal thresholds); a temperature above 1
+/// spreads the degrees without changing any ranking (the map stays strictly
+/// monotone).
 ///
 /// ```no_run
 /// use heyting::{answer_query_topk, Godel, Query, QueryConfig};
@@ -16,22 +20,45 @@ use crate::query::AtomicScorer;
 /// #     (vec![vec![0.0_f32]], vec![vec![0.0_f32]], 1);
 /// // any tranz::Scorer: a trained DistMult/ComplEx/TransE/RotatE.
 /// let model = tranz::DistMult::from_vecs(entity_vecs, relation_vecs, dim);
-/// let scorer = PointModel(model);
+/// let scorer = PointModel::new(model);
 /// let q = Query::anchor(0, 0).then(1); // 2-hop chain
 /// let top = answer_query_topk::<Godel>(&scorer, &q, &QueryConfig::default(), 10);
 /// ```
-pub struct PointModel<S>(pub S);
+pub struct PointModel<S> {
+    /// The wrapped tranz scorer.
+    pub model: S,
+    /// Sigmoid temperature; `1.0` is the plain logistic map.
+    pub temperature: f32,
+}
+
+impl<S> PointModel<S> {
+    /// Wrap a scorer with the plain sigmoid map (temperature `1.0`).
+    pub fn new(model: S) -> Self {
+        Self::with_temperature(model, 1.0)
+    }
+
+    /// Wrap a scorer with a temperature; non-finite or non-positive values
+    /// fall back to `1.0` (the map must stay strictly monotone).
+    pub fn with_temperature(model: S, temperature: f32) -> Self {
+        let temperature = if temperature.is_finite() && temperature > 0.0 {
+            temperature
+        } else {
+            1.0
+        };
+        Self { model, temperature }
+    }
+}
 
 impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
     fn num_entities(&self) -> usize {
-        self.0.num_entities()
+        self.model.num_entities()
     }
 
     fn project(&self, anchor: usize, relation: usize) -> Vec<f32> {
-        self.0
+        self.model
             .score_all_tails(anchor, relation)
             .iter()
-            .map(|&s| sigmoid(-s))
+            .map(|&s| sigmoid(-s / self.temperature))
             .collect()
     }
 }
@@ -59,7 +86,7 @@ mod tests {
         let ent = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
         let rel = vec![vec![1.0, 1.0]];
         let model = tranz::DistMult::from_vecs(ent, rel, 2);
-        let scorer = PointModel(model);
+        let scorer = PointModel::new(model);
 
         let scores = answer_query::<Godel>(&scorer, &Query::anchor(0, 0), &QueryConfig::default());
         assert_eq!(scores.len(), 3);

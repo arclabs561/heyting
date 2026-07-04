@@ -12,14 +12,19 @@
 //! answer, through which intermediates — with the invariant that the
 //! witness's degree equals the engine's [`answer_query`] degree exactly.
 //!
-//! Scope is deliberate: witnesses require the [`Idempotent`] bound (today: Gödel). `Product` and
+//! Scope is deliberate: witnesses require the [`SelectiveOr`] bound (Gödel, Viterbi). `Product` and
 //! `Lukasiewicz` are not semirings at all (`⊗` fails to distribute over
 //! their `⊕`; e.g. under Łukasiewicz at `a = b = c = 0.5`,
 //! `a ⊗ (b ⊕ c) = 0.5` but `(a ⊗ b) ⊕ (a ⊗ c) = 0`), so a single-derivation
 //! witness would misreport their degrees, which genuinely aggregate across
-//! derivations. Negation and implication invert degrees — the "witness" for
-//! an inverted answer is the *absence* of a derivation, a different object —
-//! so they are unsupported, matching the box materializer's scope.
+//! derivations. Negation and implication are covered by *refutation* and
+//! *residuum* markers: the witness of `¬q` is the recorded absence of any
+//! derivation of `q` (Grädel & Tannen's dual indeterminates, arXiv:1712.01980,
+//! in witness form — negated literals are tracked outside `⊕`/`⊗`), and the
+//! witness of `p → c` records the premise degree with the conclusion's
+//! witness when one exists. Recursion/fixpoints (path queries) would need the
+//! absorptive-polynomial carrier (Dannert-Grädel-Naaf-Tannen, CSL 2021); the
+//! tree-form `Query` has none, so witnesses stay polynomial-free.
 //!
 //! This is the degree-path counterpart of the geometric
 //! `materialize_explained` (feature `subsume`): one explains via regions,
@@ -28,7 +33,7 @@
 //! [`answer_query`]: crate::answer_query
 
 use crate::query::{answer_query, AtomicScorer, Query, QueryConfig};
-use crate::truth::Idempotent;
+use crate::truth::SelectiveOr;
 
 /// A bottleneck derivation tree for one answer entity.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +72,27 @@ pub enum Witness {
         /// Its degree.
         degree: f32,
     },
+    /// A refutation: the recorded absence of any derivation under the
+    /// negated sub-query (`degree = ¬inner_degree`, crisp under
+    /// [`SelectiveOr`] algebras).
+    Refutation {
+        /// The answer entity.
+        entity: usize,
+        /// The negated sub-query's degree at the entity.
+        inner_degree: f32,
+        /// `T::neg(inner_degree)`.
+        degree: f32,
+    },
+    /// A residuum `p → c`: satisfied vacuously when `p ≤ c`, otherwise
+    /// carried by the conclusion.
+    Implied {
+        /// The premise's degree at the entity.
+        premise_degree: f32,
+        /// The conclusion's witness, when the conclusion has any support.
+        conclusion: Option<Box<Witness>>,
+        /// `T::residuum(premise, conclusion)`.
+        degree: f32,
+    },
     /// An existential hop: the winning intermediate and its two legs.
     Via {
         /// The intermediate entity the existential chose.
@@ -89,6 +115,8 @@ impl Witness {
             | Witness::Given { degree, .. }
             | Witness::All { degree, .. }
             | Witness::Any { degree, .. }
+            | Witness::Refutation { degree, .. }
+            | Witness::Implied { degree, .. }
             | Witness::Via { degree, .. } => *degree,
         }
     }
@@ -132,6 +160,29 @@ impl Witness {
                 let _ = writeln!(out, "{pad}any: branch {branch} [{degree:.3}]");
                 inner.render_into(out, depth + 1);
             }
+            Witness::Refutation {
+                entity,
+                inner_degree,
+                degree,
+            } => {
+                let _ = writeln!(
+                    out,
+                    "{pad}refuted({entity}): inner degree {inner_degree:.3} [{degree:.3}]"
+                );
+            }
+            Witness::Implied {
+                premise_degree,
+                conclusion,
+                degree,
+            } => {
+                let _ = writeln!(
+                    out,
+                    "{pad}implied: premise {premise_degree:.3} [{degree:.3}]"
+                );
+                if let Some(c) = conclusion {
+                    c.render_into(out, depth + 1);
+                }
+            }
             Witness::Via {
                 intermediate,
                 inner,
@@ -151,20 +202,12 @@ impl Witness {
 pub enum WitnessError {
     /// The entity's degree is zero: nothing derives it, so no witness exists.
     ZeroDegree,
-    /// Negation and implication answers have no derivation witness.
-    UnsupportedConnective(&'static str),
 }
 
 impl std::fmt::Display for WitnessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ZeroDegree => write!(f, "degree is zero: no derivation supports this entity"),
-            Self::UnsupportedConnective(c) => {
-                write!(
-                    f,
-                    "{c} inverts degrees; its answers have no derivation witness"
-                )
-            }
         }
     }
 }
@@ -173,13 +216,13 @@ impl std::error::Error for WitnessError {}
 
 /// The bottleneck witness for `entity` under `query`.
 ///
-/// Bounded by [`Idempotent`], which is what makes a single-derivation
-/// witness exact: an idempotent algebra is provably `(min, max)`, so every
-/// degree is realized by one bottleneck derivation. Evaluates sub-queries
+/// Bounded by [`SelectiveOr`], which is what makes a single-derivation
+/// witness exact: a selective `⊕` is `max`, so every degree is realized by
+/// one best derivation (bottleneck under Gödel, best product under Viterbi). Evaluates sub-queries
 /// with the ordinary dense engine and reads the argmax/argmin chain off the
 /// degree vectors, so the returned tree's [`Witness::degree`] equals
 /// `answer_query::<T>(..)[entity]` exactly.
-pub fn explain_answer<T: Idempotent>(
+pub fn explain_answer<T: SelectiveOr>(
     scorer: &dyn AtomicScorer,
     query: &Query,
     config: &QueryConfig,
@@ -192,7 +235,7 @@ pub fn explain_answer<T: Idempotent>(
     Ok(w)
 }
 
-fn witness<T: Idempotent>(
+fn witness<T: SelectiveOr>(
     scorer: &dyn AtomicScorer,
     query: &Query,
     config: &QueryConfig,
@@ -295,8 +338,35 @@ fn witness<T: Idempotent>(
                 degree: path,
             })
         }
-        Query::Negation { .. } => Err(WitnessError::UnsupportedConnective("negation")),
-        Query::Implication { .. } => Err(WitnessError::UnsupportedConnective("implication")),
+        Query::Negation { inner } => {
+            let inner_degree = answer_query::<T>(scorer, inner, config)
+                .get(entity)
+                .copied()
+                .unwrap_or(0.0);
+            Ok(Witness::Refutation {
+                entity,
+                inner_degree,
+                degree: T::neg(inner_degree),
+            })
+        }
+        Query::Implication {
+            premise,
+            conclusion,
+        } => {
+            let p = answer_query::<T>(scorer, premise, config)
+                .get(entity)
+                .copied()
+                .unwrap_or(0.0);
+            let conclusion_witness = witness::<T>(scorer, conclusion, config, entity)
+                .ok()
+                .filter(|w| w.degree() > 0.0);
+            let c = conclusion_witness.as_ref().map_or(0.0, Witness::degree);
+            Ok(Witness::Implied {
+                premise_degree: p,
+                conclusion: conclusion_witness.map(Box::new),
+                degree: T::residuum(p, c),
+            })
+        }
     }
 }
 
@@ -304,7 +374,7 @@ fn witness<T: Idempotent>(
 mod tests {
     use super::*;
     use crate::kg::FuzzyKg;
-    use crate::truth::Godel;
+    use crate::truth::{Godel, Viterbi};
 
     /// 0=animal 1=mammal 2=dog 3=cat 4=fish; 0=is_a, 1=eats. Two paths from
     /// dog to animal exist only via mammal; degrees are all distinct so
@@ -333,6 +403,8 @@ mod tests {
                 Query::anchor(2, 0).then(0),
                 Query::given(vec![0.6; 5]),
             ]),
+            Query::anchor(2, 0).negate(),
+            Query::anchor(2, 0).implies(Query::anchor(3, 0)),
         ];
         for q in &queries {
             let dense = answer_query::<Godel>(&kg, q, &cfg);
@@ -391,16 +463,31 @@ mod tests {
     }
 
     #[test]
-    fn zero_degree_and_inverting_connectives_refuse() {
+    fn zero_degree_refuses_and_negation_witnesses_are_refutations() {
         let kg = kg();
         let cfg = QueryConfig::default();
         assert_eq!(
             explain_answer::<Godel>(&kg, &Query::anchor(2, 0), &cfg, 4).unwrap_err(),
             WitnessError::ZeroDegree
         );
+        // dog is_a fish has degree 0, so its negation at fish is a
+        // full-degree refutation (crisp Gödel negation).
+        let w = explain_answer::<Godel>(&kg, &Query::anchor(2, 0).negate(), &cfg, 4).unwrap();
+        match w {
+            Witness::Refutation {
+                inner_degree,
+                degree,
+                ..
+            } => {
+                assert_eq!(inner_degree, 0.0);
+                assert_eq!(degree, 1.0);
+            }
+            other => panic!("expected Refutation, got {other:?}"),
+        }
+        // A supported answer's negation is degree 0: no witness.
         assert_eq!(
             explain_answer::<Godel>(&kg, &Query::anchor(2, 0).negate(), &cfg, 1).unwrap_err(),
-            WitnessError::UnsupportedConnective("negation")
+            WitnessError::ZeroDegree
         );
     }
 }

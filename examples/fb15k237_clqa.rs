@@ -66,7 +66,11 @@ fn main() {
         .collect();
     let dim = ent_vecs.first().map(Vec::len).unwrap_or(0);
     let n_ent = ent_names.len();
-    let model = PointModel(tranz::DistMult::from_vecs(ent_vecs, rel_vecs, dim));
+    // Temperature 5 spreads saturated 1-N scores across (0, 1); every ranking
+    // metric is invariant (the map is monotone), but conformal thresholds
+    // become non-degenerate.
+    let model =
+        PointModel::with_temperature(tranz::DistMult::from_vecs(ent_vecs, rel_vecs, dim), 5.0);
 
     let to_ids = |split: &[(String, String, String)]| -> Vec<(usize, usize, usize)> {
         split

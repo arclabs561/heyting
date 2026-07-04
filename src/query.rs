@@ -58,6 +58,15 @@ impl Default for QueryConfig {
 
 /// A complex logical query as a computation DAG over atomic projections.
 ///
+/// # Scope: the tree-form fragment
+///
+/// This type is a tree, so it expresses exactly the *tree-form* fragment of
+/// existential first-order queries — the acyclic class where evaluation is
+/// tractable (Yannakakis) and the pruned evaluator is exact. Cyclic or
+/// multi-anchor-join EFO1 queries (two atoms constraining the same pair of
+/// variables) are not constructible here; supporting them is a search
+/// problem (QTO/FIT-style), deliberately out of scope.
+///
 /// Build with the constructors ([`Query::anchor`], [`Query::then`], etc.) and
 /// evaluate with [`answer_query`] / [`answer_query_topk`]. The connectives
 /// realize existential positive first-order logic plus negation and the Heyting

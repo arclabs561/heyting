@@ -113,6 +113,21 @@ pub trait Truth {
     }
 }
 
+/// Marker for algebras whose `⊕` is *selective*: `a ⊕ b ∈ {a, b}`.
+///
+/// On `[0, 1]` the only selective t-conorm is `max`, so a `SelectiveOr`
+/// algebra pairs its t-norm with `max` — and by monotonicity every t-norm
+/// distributes over `max`, making each such algebra a commutative semiring
+/// (the `*`-with-max family: fuzzy `(min, max)`, Viterbi `(·, max)`,
+/// bounded-sum-with-max). Selectivity is what makes single-derivation
+/// witnesses exact: a `max` always realizes one operand, so every answer
+/// degree is carried by one derivation ([`crate::provenance`]'s bound).
+/// Implemented by [`Godel`] and [`Viterbi`].
+pub trait SelectiveOr: Truth {}
+
+impl SelectiveOr for Godel {}
+impl SelectiveOr for Viterbi {}
+
 /// Marker for algebras whose `⊗` and `⊕` are both idempotent.
 ///
 /// By the classical t-norm result (Klement, Mesiar & Pap, *Triangular
@@ -124,7 +139,7 @@ pub trait Truth {
 /// derivation, which is what makes [`crate::provenance`]'s witness trees
 /// exact. Implemented by [`Godel`] alone; implementing it for a
 /// non-`(min, max)` algebra breaks those guarantees.
-pub trait Idempotent: Truth {}
+pub trait Idempotent: SelectiveOr {}
 
 impl Idempotent for Godel {}
 
@@ -178,6 +193,36 @@ impl Truth for Product {
             1.0
         } else {
             // a > b ≥ 0 implies a > 0, so the division is safe.
+            b / a
+        }
+    }
+}
+
+/// Viterbi algebra: the product t-norm paired with `max` — the classical
+/// Viterbi semiring `([0, 1], max, ·, 0, 1)` of best-derivation decoding.
+///
+/// Chains propagate magnitude like [`Product`], but disjunction picks the
+/// strongest alternative instead of accumulating, which keeps the algebra a
+/// semiring (provenance machinery applies) and makes it witnessable
+/// ([`SelectiveOr`]): the answer degree is exactly the best derivation's
+/// product. The residuum is the Goguen residuum (it depends only on `⊗`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Viterbi;
+
+impl Truth for Viterbi {
+    #[inline]
+    fn and(a: f32, b: f32) -> f32 {
+        a * b
+    }
+    #[inline]
+    fn or(a: f32, b: f32) -> f32 {
+        a.max(b)
+    }
+    #[inline]
+    fn residuum(a: f32, b: f32) -> f32 {
+        if a <= b {
+            1.0
+        } else {
             b / a
         }
     }
@@ -311,6 +356,25 @@ mod tests {
             check_or_identities::<Lukasiewicz>(a);
             check_de_morgan::<Lukasiewicz>(a, b);
             check_residuation::<Lukasiewicz>(a, b, c);
+        }
+
+        #[test]
+        fn viterbi_is_a_residuated_lattice(a in degree(), b in degree(), c in degree()) {
+            check_unit::<Viterbi>(a);
+            check_commutative::<Viterbi>(a, b);
+            check_associativity::<Viterbi>(a, b, c);
+            check_or_identities::<Viterbi>(a);
+            check_de_morgan::<Viterbi>(a, b);
+            check_residuation::<Viterbi>(a, b, c);
+        }
+
+        #[test]
+        fn selective_or_algebras_distribute(a in degree(), b in degree(), c in degree()) {
+            // The semiring law the SelectiveOr marker promises: ⊗ over ⊕.
+            prop_assert!((Godel::and(a, Godel::or(b, c))
+                - Godel::or(Godel::and(a, b), Godel::and(a, c))).abs() < EPS);
+            prop_assert!((Viterbi::and(a, Viterbi::or(b, c))
+                - Viterbi::or(Viterbi::and(a, b), Viterbi::and(a, c))).abs() < EPS);
         }
 
         #[test]
