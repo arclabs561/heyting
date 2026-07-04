@@ -22,11 +22,21 @@
 //! Windows are crisp (a fact either satisfies the window or not; degrees
 //! come from the fact's weight). Soft window boundaries are a scorer-side
 //! refinement, same as soft literal ramps for [`Query::given`]. Windows can
-//! also be anchored to another fact's validity interval — TFLEX's
-//! event-relative before/after/during operators — via
-//! [`TemporalKg::windowed_after_fact`] and siblings; the full TFLEX design
-//! (fuzzy sets over a timestamp sort, jointly with the entity sort) remains
-//! out of scope until a temporal scorer exists to demand it.
+//! also be anchored to another fact's validity interval via
+//! [`TemporalKg::windowed_after_fact`] and siblings.
+//!
+//! For event KGs with discrete timestamps (ICEWS-style), [`TimeSet`] is the
+//! set-valued carrier: TFLEX (Lin et al., NeurIPS 2023) defines the crisp
+//! semantics this module implements symbolically — entity projection is
+//! existential over a timestamp set, and its After/Before/Between operators
+//! act on SETS ([`TimeSet::after_all`] is `{t' > max(S)}`,
+//! [`TimeSet::before_all`] is `{t' < min(S)}`, [`TimeSet::between_all`]
+//! their intersection) — while TFLEX itself approximates these semantics
+//! with fuzzy neural embeddings. The trained counterpart of this module is
+//! `adapters::TemporalPointModel` (feature `tranz`). Not covered:
+//! timestamp-ANSWERING queries (TFLEX's time projection, "when did X r
+//! Y"), which need a second answer sort; the scorer-side seam for them is
+//! `tranz::temporal::TemporalScorer::score_all_times`.
 //!
 //! [`Query`]: crate::Query
 //! [`Query::given`]: crate::Query::given
@@ -185,6 +195,39 @@ impl TimeSet {
     /// Iterate the member timestamps in increasing order.
     pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.n).filter(move |&t| self.contains(t))
+    }
+
+    /// Timestamps strictly after every member: TFLEX's After operator on a
+    /// timestamp set, `{t' : t' > max(S)}` (Lin et al., NeurIPS 2023,
+    /// definition 4 of the computation-graph edges). An empty input gives
+    /// the empty set: an empty premise admits nothing downstream, matching
+    /// the engine's zero-degree propagation (the vacuous all-axis reading
+    /// would admit everything after a failed sub-query).
+    pub fn after_all(&self) -> Self {
+        match self.iter().last() {
+            Some(max) => Self::after(max, self.n),
+            None => Self::empty(self.n),
+        }
+    }
+
+    /// Timestamps strictly before every member: TFLEX's Before operator,
+    /// `{t' : t' < min(S)}`. Empty input gives the empty set (see
+    /// [`after_all`](Self::after_all)).
+    pub fn before_all(&self) -> Self {
+        match self.iter().next() {
+            Some(min) => Self::before(min, self.n),
+            None => Self::empty(self.n),
+        }
+    }
+
+    /// TFLEX's Between operator: the timestamps after every member of `a`
+    /// and before every member of `b`,
+    /// `Between(a, b) = After(a) ∩ Before(b)`.
+    ///
+    /// # Panics
+    /// Panics if the axes differ.
+    pub fn between_all(a: &Self, b: &Self) -> Self {
+        a.after_all().intersect(&b.before_all())
     }
 }
 
@@ -436,6 +479,32 @@ mod tests {
         // Complement never leaks off-axis bits.
         assert_eq!(TimeSet::empty(n).complement(), TimeSet::all(n));
         assert_eq!(TimeSet::all(n).complement().len(), 0);
+    }
+
+    /// TFLEX's set-level operators: After/Before anchor at the extremes of
+    /// the operand set; Between is their intersection; empty premises
+    /// propagate as empty.
+    #[test]
+    fn tflex_set_operators() {
+        let n = 10;
+        let mut s = TimeSet::empty(n);
+        s.insert(3);
+        s.insert(7);
+        assert_eq!(s.after_all(), TimeSet::after(7, n), "after max");
+        assert_eq!(s.before_all(), TimeSet::before(3, n), "before min");
+
+        let a = TimeSet::singleton(2, n);
+        let b = TimeSet::singleton(8, n);
+        assert_eq!(
+            TimeSet::between_all(&a, &b),
+            TimeSet::between(3, 7, n),
+            "open interval between the anchors"
+        );
+        // Reversed anchors leave nothing between.
+        assert!(TimeSet::between_all(&b, &a).is_empty());
+        // Empty premises admit nothing.
+        assert!(TimeSet::empty(n).after_all().is_empty());
+        assert!(TimeSet::empty(n).before_all().is_empty());
     }
 
     /// The TFLEX non-contiguous cases intervals cannot carry: a complement
