@@ -76,6 +76,9 @@ assert_eq!(top[0].0, 1);
   realized by one best derivation, and `explain_answer` returns it with
   witness degree exactly equal to the engine degree. Negation is witnessed
   as a recorded refutation.
+- **Abduction** (`abduce`): the reverse question. Given observed entities,
+  recover the template hypothesis (one-hop atoms and their pairwise
+  conjunctions) that best explains them, scored by fuzzy Jaccard overlap.
 - **Numeric literals** (`Query::given`): encode "attribute in `[lo, hi]`" as
   a degree vector and conjoin it with relation hops.
 - **Temporal scoping** (`temporal`): facts carry validity intervals; a
@@ -109,3 +112,35 @@ score with the easy/hard protocol, print a witness and conformal coverage.
 `heyting` generalizes `tranz::query` (CQD-Beam over point embeddings,
 Arakelyan et al. 2021): implement `AtomicScorer` for any point or region
 model and the same connectives answer complex queries over it.
+
+## References
+
+- Hájek. *Metamathematics of Fuzzy Logic*. Kluwer, 1998. The residuated
+  lattices and the three fundamental algebras.
+- Green, Karvounarakis, Tannen. Provenance semirings. PODS 2007. Why the
+  witness machinery needs a semiring.
+- Goodman. Semiring parsing. Computational Linguistics 25(4), 1999. The
+  Viterbi semiring.
+- Ren, Hu, Leskovec. Query2box: reasoning over knowledge graphs in vector
+  space using box embeddings. ICLR 2020.
+  [arXiv:2002.05969](https://arxiv.org/abs/2002.05969). Box geometry and
+  DNF unions.
+- Ren, Leskovec. Beta embeddings for multi-hop logical reasoning in
+  knowledge graphs. NeurIPS 2020.
+  [arXiv:2010.11465](https://arxiv.org/abs/2010.11465). The easy/hard
+  evaluation protocol.
+- Arakelyan, Daza, Minervini, Cochez. Complex query answering with neural
+  link predictors. ICLR 2021.
+  [arXiv:2011.03459](https://arxiv.org/abs/2011.03459). One-hop scorer plus
+  t-norm inference, the execution model here.
+- Yin, Wang, Song. Rethinking complex queries on knowledge graphs with
+  neural link predictors. ICLR 2024.
+  [arXiv:2304.07063](https://arxiv.org/abs/2304.07063). Tree-form vs cyclic
+  query classes.
+- Vovk, Gammerman, Shafer. *Algorithmic Learning in a Random World*.
+  Springer, 2005. Conformal prediction.
+- Angelopoulos, Bates. A gentle introduction to conformal prediction and
+  distribution-free uncertainty quantification.
+  [arXiv:2107.07511](https://arxiv.org/abs/2107.07511).
+- Bai et al. Advancing abductive reasoning in knowledge graphs through
+  complex logical hypothesis generation. ACL 2024. The abduction task.
