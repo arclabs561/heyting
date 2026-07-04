@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0] - 2026-07-03
+
+### Added
+
+- Geometric execution mode (feature `subsume`): `BoxModel::materialize` /
+  `materialize_explained` compose the query's boxes themselves, returning a
+  `BoxDnf` answer region (exact intersections, DNF unions, no negation) and
+  an `Explanation` composition tree with per-node log-volumes.
+
+### Changed
+
+- The `subsume` feature now depends on `subsume` 0.14.1 with default
+  features off, dropping its ndarray/serde_json/lattix subtree.
+
 ## [0.7.0] - 2026-07-03
 
 ### Added
