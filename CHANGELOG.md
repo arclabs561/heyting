@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2026-07-03
+
+### Added
+
+- `Query::Given` / `Query::given`: precomputed membership leaves, the
+  numeric-literal-constraint pattern (encode "attribute in [lo, hi]" as a
+  degree vector and conjoin it with relation hops).
+
+### Changed
+
+- The pruned evaluator plans intersections: branches evaluate most-selective
+  first (candidate-count estimates) and later branches are restricted to the
+  surviving support, cutting scoring work with identical results.
+
 ## [0.5.0] - 2026-07-03
 
 ### Added
