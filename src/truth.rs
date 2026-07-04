@@ -37,6 +37,24 @@
 //! [`Godel`] (min) for intersections, [`Product`] for chains (it propagates
 //! magnitude through hops). That region negation is only a pseudo-complement,
 //! not a Boolean one, is exactly why geometric CLQA negation is approximate.
+//!
+//! # Which algebras are semirings
+//!
+//! Provenance semirings (Green, Karvounarakis & Tannen, PODS 2007) require
+//! `(⊕, ⊗)` to form a commutative semiring — in particular `⊗` must
+//! distribute over `⊕` — and in exchange give the factorization theorem
+//! (evaluation factors through provenance polynomials) and homomorphism
+//! commutation. Only [`Godel`] qualifies: `(min, max)` on `[0, 1]` is that
+//! paper's *fuzzy semiring*, a distributive lattice. The other two fail
+//! distributivity outright: under [`Product`],
+//! `a ⊗ (b ⊕ c) = ab + ac − abc` but `(a⊗b) ⊕ (a⊗c) = ab + ac − a²bc`;
+//! under [`Lukasiewicz`] at `a = b = c = 0.5`, `a ⊗ (b ⊕ c) = 0.5` while
+//! `(a⊗b) ⊕ (a⊗c) = 0`. They are residuated lattices, not semirings — so
+//! degree under them genuinely *aggregates across derivations* (the same
+//! fact reached through two branches raises the answer), which is
+//! how-provenance counting leaking into the degree, not a bug. The
+//! [`Idempotent`] marker encodes the Gödel side of this line for APIs
+//! (like [`crate::provenance`]) whose soundness needs it.
 
 /// A residuated lattice of truth degrees on `[0, 1]`.
 ///
@@ -94,6 +112,21 @@ pub trait Truth {
         Self::residuum(a, Self::bot())
     }
 }
+
+/// Marker for algebras whose `⊗` and `⊕` are both idempotent.
+///
+/// By the classical t-norm result (Klement, Mesiar & Pap, *Triangular
+/// Norms*), the only idempotent t-norm is `min` and the only idempotent
+/// t-conorm is `max` — so an `Idempotent` algebra IS `(min, max)`, i.e. the
+/// fuzzy semiring of Green et al. (see the module docs). Two consequences
+/// APIs rely on: evaluation is a semiring computation (provenance machinery
+/// applies), and every answer degree is realized by a single bottleneck
+/// derivation, which is what makes [`crate::provenance`]'s witness trees
+/// exact. Implemented by [`Godel`] alone; implementing it for a
+/// non-`(min, max)` algebra breaks those guarantees.
+pub trait Idempotent: Truth {}
+
+impl Idempotent for Godel {}
 
 /// Gödel algebra: the minimum t-norm. The canonical **Heyting algebra** on
 /// `[0, 1]`; its negation is the crisp intuitionistic pseudo-complement.
