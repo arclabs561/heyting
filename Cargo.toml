@@ -34,8 +34,13 @@ required-features = ["tranz"]
 name = "icews14_temporal_clqa"
 required-features = ["tranz"]
 
+[[example]]
+name = "betae_fb15k237"
+required-features = ["tranz"]
+
 [dev-dependencies]
 proptest = "1.5"
+serde-pickle = "1.2"
 
 [lints.rust]
 missing_docs = "warn"
