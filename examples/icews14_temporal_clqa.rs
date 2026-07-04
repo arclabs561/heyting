@@ -32,7 +32,10 @@
 //!  --output ../heyting/data/icews14-tcomplex`
 //! (the Lacroix et al. regularizers are worth ~0.18 link-prediction MRR
 //! here; keep `--init-scale 0.01` with them, see tranz's changelog).
-//! Without them this prints instructions and exits 0.
+//! Without them this prints instructions and exits 0. Pretrained
+//! checkpoints (skip the training step):
+//! `hf download arclabs561/tcomplex-icews14 --local-dir data/icews14-tcomplex`
+//! (and `arclabs561/tcomplex-icews05-15` for the larger dataset).
 //!
 //! Run: cargo run --release --features tranz --example icews14_temporal_clqa
 //!
@@ -80,6 +83,8 @@ fn main() {
         eprintln!("   --epochs 100 --batch-size 1024 --lr 0.01 --init-scale 0.01 \\");
         eprintln!("   --label-smoothing 0.1 --n3-reg 0.0025 --time-smooth 1.0 \\");
         eprintln!("   --output ../heyting/{EMB}");
+        eprintln!("   (or skip training: hf download arclabs561/tcomplex-icews14 \\");
+        eprintln!("    --local-dir {EMB})");
         return; // data-gated no-op.
     };
 
