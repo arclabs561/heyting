@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0] - 2026-07-03
+
+### Added
+
+- `abduce` module: template-based abductive hypothesis generation — given
+  observed entities, recover the atom or conjunction that best explains
+  them (fuzzy-Jaccard scored). The abductive twin of `provenance`.
+
+### Changed
+
+- README documents the full current surface (algebras and the semiring
+  line, planning, conformal, provenance, literals, temporal, adapters).
+
 ## [0.10.0] - 2026-07-03
 
 ### Added
