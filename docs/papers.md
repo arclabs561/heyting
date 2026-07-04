@@ -136,3 +136,48 @@ feedback from the graph.
 heyting takes: the task and the scoring shape. `abduce` is the symbolic
 version: sweep template hypotheses (one-hop atoms, pairwise conjunctions),
 score by fuzzy Jaccard, return the best. No learned generator.
+
+### Tensor decompositions for temporal knowledge base completion (Lacroix, Obozinski, Usunier, ICLR 2020)
+
+Expresses a temporal knowledge base as an order-4 tensor and scores quads
+with TComplEx: `Re(⟨h, r, conj(t), w_τ⟩)`, where the timestamp embedding
+modulates the relation (equivalently either entity) componentwise.
+TNTComplEx splits the relation into temporal and static parts for
+heterogeneous KBs where many predicates never change; on all-event data
+(ICEWS) it matches plain TComplEx, so the split earns its parameters only
+when non-temporal facts dominate. The paper's real lever is
+regularization: the weighted nuclear-3 variational form Ω³ penalizes the
+`(relation ∘ timestamp)` product as one factor — unfolding the tensor
+along the predicate and time modes shows this weights by the joint
+predicate-time marginal rather than the product of marginals — and the
+smoothness prior Λ_p penalizes the discrete derivative of the timestamp
+table. Together they are worth about five MRR points on ICEWS05-15
+(their Table 3). Training is tail-only cross-entropy with reciprocal
+relations; a second "time-tube" cross-entropy (their Eq. 7) teaches the
+timestamp-answering direction at about one MRR point's cost to entity
+ranking.
+
+heyting takes: the trained scorer behind `adapters::TemporalPointModel`.
+tranz implements the model, both regularizers, and a `score_all_times`
+seam (the Eq. 7 direction) as `tranz::temporal`.
+
+### TFLEX: temporal feature-logic embedding framework (Lin et al., NeurIPS 2023)
+
+Defines multi-hop logical reasoning over temporal KGs. Queries answer
+entity sets or timestamp sets; the computation-graph semantics makes
+entity projection existential over a timestamp set, gives set complement
+on either sort, and adds three set-level temporal operators:
+`After(S) = {t' : t' > max(S)}`, `Before(S) = {t' : t' < min(S)}`, and
+`Between(S₁, S₂)` as their intersection. Their solver embeds each query
+as (entity feature, entity logic, time feature, time logic) with fuzzy
+vector logic on the logic parts and translation-style MLP projections;
+ablations show removing either the time part or the logic part costs
+real accuracy, and grafting a static geometric query embedding onto the
+time part conflicts semantically.
+
+heyting takes: the crisp set semantics, implemented symbolically —
+`TimeSet::after_all` / `before_all` / `between_all` are the three
+operators exactly, entity hops are existential over the set, and
+complement is native to the bitset carrier. Not taken: the neural query
+embedding itself, and timestamp-answering queries (their time
+projection), which remain the named gap.

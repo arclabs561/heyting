@@ -155,3 +155,11 @@ Each entry links to a mechanism-level summary in [docs/papers.md](docs/papers.md
   [arXiv:2107.07511](https://arxiv.org/abs/2107.07511). [notes](docs/papers.md#a-gentle-introduction-to-conformal-prediction-angelopoulos-bates-2021)
 - Bai et al. Advancing abductive reasoning in knowledge graphs through
   complex logical hypothesis generation. ACL 2024. The abduction task. [notes](docs/papers.md#advancing-abductive-reasoning-in-knowledge-graphs-through-complex-logical-hypothesis-generation-bai-et-al-acl-2024)
+- Lacroix, Obozinski, Usunier. Tensor decompositions for temporal
+  knowledge base completion. ICLR 2020.
+  [arXiv:2004.04926](https://arxiv.org/abs/2004.04926). The trained
+  temporal scorer. [notes](docs/papers.md#tensor-decompositions-for-temporal-knowledge-base-completion-lacroix-obozinski-usunier-iclr-2020)
+- Lin et al. TFLEX: temporal feature-logic embedding framework for
+  complex reasoning over temporal knowledge graph. NeurIPS 2023.
+  [arXiv:2205.14307](https://arxiv.org/abs/2205.14307). The timestamp-set
+  semantics. [notes](docs/papers.md#tflex-temporal-feature-logic-embedding-framework-lin-et-al-neurips-2023)
