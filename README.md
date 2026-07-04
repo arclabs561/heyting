@@ -115,32 +115,34 @@ model and the same connectives answer complex queries over it.
 
 ## References
 
+Each entry links to a mechanism-level summary in [docs/papers.md](docs/papers.md).
+
 - Hájek. *Metamathematics of Fuzzy Logic*. Kluwer, 1998. The residuated
-  lattices and the three fundamental algebras.
+  lattices and the three fundamental algebras. [notes](docs/papers.md#metamathematics-of-fuzzy-logic-hajek-1998)
 - Green, Karvounarakis, Tannen. Provenance semirings. PODS 2007. Why the
-  witness machinery needs a semiring.
+  witness machinery needs a semiring. [notes](docs/papers.md#provenance-semirings-green-karvounarakis-tannen-pods-2007)
 - Goodman. Semiring parsing. Computational Linguistics 25(4), 1999. The
-  Viterbi semiring.
+  Viterbi semiring. [notes](docs/papers.md#semiring-parsing-goodman-1999)
 - Ren, Hu, Leskovec. Query2box: reasoning over knowledge graphs in vector
   space using box embeddings. ICLR 2020.
   [arXiv:2002.05969](https://arxiv.org/abs/2002.05969). Box geometry and
-  DNF unions.
+  DNF unions. [notes](docs/papers.md#query2box-ren-hu-leskovec-iclr-2020)
 - Ren, Leskovec. Beta embeddings for multi-hop logical reasoning in
   knowledge graphs. NeurIPS 2020.
   [arXiv:2010.11465](https://arxiv.org/abs/2010.11465). The easy/hard
-  evaluation protocol.
+  evaluation protocol. [notes](docs/papers.md#beta-embeddings-ren-leskovec-neurips-2020)
 - Arakelyan, Daza, Minervini, Cochez. Complex query answering with neural
   link predictors. ICLR 2021.
   [arXiv:2011.03459](https://arxiv.org/abs/2011.03459). One-hop scorer plus
-  t-norm inference, the execution model here.
+  t-norm inference, the execution model here. [notes](docs/papers.md#complex-query-answering-with-neural-link-predictors-arakelyan-daza-minervini-cochez-iclr-2021)
 - Yin, Wang, Song. Rethinking complex queries on knowledge graphs with
   neural link predictors. ICLR 2024.
   [arXiv:2304.07063](https://arxiv.org/abs/2304.07063). Tree-form vs cyclic
-  query classes.
+  query classes. [notes](docs/papers.md#rethinking-complex-queries-on-knowledge-graphs-with-neural-link-predictors-yin-wang-song-iclr-2024)
 - Vovk, Gammerman, Shafer. *Algorithmic Learning in a Random World*.
-  Springer, 2005. Conformal prediction.
+  Springer, 2005. Conformal prediction. [notes](docs/papers.md#algorithmic-learning-in-a-random-world-vovk-gammerman-shafer-2005)
 - Angelopoulos, Bates. A gentle introduction to conformal prediction and
   distribution-free uncertainty quantification.
-  [arXiv:2107.07511](https://arxiv.org/abs/2107.07511).
+  [arXiv:2107.07511](https://arxiv.org/abs/2107.07511). [notes](docs/papers.md#a-gentle-introduction-to-conformal-prediction-angelopoulos-bates-2021)
 - Bai et al. Advancing abductive reasoning in knowledge graphs through
-  complex logical hypothesis generation. ACL 2024. The abduction task.
+  complex logical hypothesis generation. ACL 2024. The abduction task. [notes](docs/papers.md#advancing-abductive-reasoning-in-knowledge-graphs-through-complex-logical-hypothesis-generation-bai-et-al-acl-2024)
