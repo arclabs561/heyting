@@ -126,6 +126,19 @@ pub enum Query {
         /// Consequent sub-query.
         conclusion: Box<Query>,
     },
+    /// A precomputed membership leaf: degree `degrees[e]` for entity `e`
+    /// (missing entries are `0`).
+    ///
+    /// This is how facts that are not relation hops enter a query — most
+    /// usefully numeric-literal constraints ("born after 1970"), where the
+    /// degree vector encodes an interval or half-space over an attribute
+    /// (crisp `0`/`1`, or a soft ramp near the boundary). Intersect it with
+    /// relation hops to get literal-constrained queries; see
+    /// [`Query::given`].
+    Given {
+        /// Per-entity membership degrees in `[0, 1]`.
+        degrees: Vec<f32>,
+    },
 }
 
 impl Query {
@@ -173,6 +186,39 @@ impl Query {
             premise: Box::new(self),
             conclusion: Box::new(conclusion),
         }
+    }
+
+    /// A precomputed membership leaf; degrees are clamped to `[0, 1]`.
+    ///
+    /// The literal-constraint pattern: encode "attribute in `[lo, hi]`" as a
+    /// degree vector and conjoin it with relation hops.
+    ///
+    /// ```
+    /// use heyting::Query;
+    ///
+    /// // "born after 1970" over a birth-year attribute (None = unknown = 0).
+    /// let birth_years = [Some(1962.0_f32), Some(1975.0), None];
+    /// let constraint = Query::given(
+    ///     birth_years
+    ///         .iter()
+    ///         .map(|y| match y {
+    ///             Some(y) if *y > 1970.0 => 1.0,
+    ///             _ => 0.0,
+    ///         })
+    ///         .collect(),
+    /// );
+    /// let q = Query::intersection(vec![Query::anchor(0, 0), constraint]);
+    /// # let _ = q;
+    /// ```
+    pub fn given(mut degrees: Vec<f32>) -> Self {
+        for d in &mut degrees {
+            *d = if d.is_finite() {
+                d.clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+        }
+        Query::Given { degrees }
     }
 }
 
@@ -256,6 +302,11 @@ fn eval<T: Truth>(
                 .zip(c.iter())
                 .map(|(&pi, &ci)| T::residuum(pi, ci))
                 .collect()
+        }
+        Query::Given { degrees } => {
+            let mut s = degrees.clone();
+            s.resize(n, 0.0);
+            s
         }
     }
 }
