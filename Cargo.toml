@@ -16,7 +16,7 @@ publish = true
 
 [dependencies]
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
-tranz = { version = "0.7.1", optional = true }
+tranz = { version = "0.7.2", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings.
 subsume = { version = "0.14.1", default-features = false, optional = true }
 

@@ -105,30 +105,18 @@ impl<S: tranz::temporal::TemporalScorer> AtomicScorer for TemporalPointModel<S> 
         if anchor >= n {
             return vec![0.0; n];
         }
-        // Existential over the set: keep the best (lowest) energy per
-        // entity across τ ∈ S, then map once (sigmoid is monotone).
-        let mut best: Option<Vec<f32>> = None;
-        for tau in times.iter() {
-            let scores = self.model.score_all_tails(anchor, base, tau);
-            best = Some(match best {
-                None => scores,
-                Some(mut acc) => {
-                    for (a, s) in acc.iter_mut().zip(&scores) {
-                        if *s < *a {
-                            *a = *s;
-                        }
-                    }
-                    acc
-                }
-            });
+        if times.is_empty() {
+            return vec![0.0; n]; // empty set: no admissible timestamp.
         }
-        match best {
-            None => vec![0.0; n], // empty set: no admissible timestamp.
-            Some(energies) => energies
-                .iter()
-                .map(|&e| sigmoid(-e / self.temperature))
-                .collect(),
-        }
+        // Existential over the set: the scorer folds the best (lowest)
+        // energy per entity across τ ∈ S (batched and parallel where the
+        // scorer overrides it), then map once (sigmoid is monotone).
+        let taus: Vec<usize> = times.iter().collect();
+        self.model
+            .score_all_tails_over(anchor, base, &taus)
+            .iter()
+            .map(|&e| sigmoid(-e / self.temperature))
+            .collect()
     }
 }
 

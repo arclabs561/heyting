@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `TemporalPointModel` hops fold their existential minimum through
+  `tranz::temporal::TemporalScorer::score_all_tails_over` (batched and
+  rayon-parallel in tranz 0.7.2), removing the per-timestamp scoring loop
+  that made not-during hops on long axes the harness bottleneck. Requires
+  `tranz >= 0.7.2`.
+
 ### Added
 
 - `TemporalPointModel::when`: time projection for a concrete fact pair
