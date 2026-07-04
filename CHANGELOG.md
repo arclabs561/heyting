@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-07-03
+
+### Added
+
+- `conformal` module: split conformal prediction over query answers
+  (`calibrate`, `answer_set`, `empirical_coverage`). Calibrating on
+  `(query, true answer)` pairs yields answer sets that contain the true
+  answer with probability at least `1 - alpha` for exchangeable queries,
+  for any scorer and truth algebra.
+
 ## [0.4.0] - 2026-07-03
 
 ### Added
