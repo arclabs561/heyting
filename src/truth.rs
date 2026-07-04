@@ -54,8 +54,7 @@
 //! fact reached through two branches raises the answer), which is
 //! how-provenance counting leaking into the degree, not a bug. The
 //! [`SelectiveOr`] marker encodes the semiring side of this line;
-//! [`crate::provenance`]'s soundness is bounded by it. [`Idempotent`]
-//! additionally marks the both-ops-idempotent case (Gödel alone).
+//! [`crate::provenance`]'s soundness is bounded by it.
 
 /// A residuated lattice of truth degrees on `[0, 1]`.
 ///
@@ -129,22 +128,13 @@ pub trait SelectiveOr: Truth {}
 impl SelectiveOr for Godel {}
 impl SelectiveOr for Viterbi {}
 
-/// Marker for algebras whose `⊗` and `⊕` are both idempotent.
-///
-/// By the classical t-norm result (Klement, Mesiar & Pap, *Triangular
-/// Norms*), the only idempotent t-norm is `min` and the only idempotent
-/// t-conorm is `max` — so an `Idempotent` algebra IS `(min, max)`, i.e. the
-/// fuzzy semiring of Green et al. (see the module docs), where every answer
-/// degree is a single bottleneck derivation. Purely descriptive today: no
-/// API bounds on it ([`crate::provenance`] is bounded by the weaker
-/// [`SelectiveOr`], which Viterbi also satisfies). Implemented by [`Godel`]
-/// alone — by the cited uniqueness result nothing else lawfully can be.
-pub trait Idempotent: SelectiveOr {}
-
-impl Idempotent for Godel {}
-
 /// Gödel algebra: the minimum t-norm. The canonical **Heyting algebra** on
 /// `[0, 1]`; its negation is the crisp intuitionistic pseudo-complement.
+/// It is also the unique algebra whose `⊗` and `⊕` are BOTH idempotent: by
+/// the classical uniqueness result (Klement, Mesiar & Pap, *Triangular
+/// Norms*), `min` is the only idempotent t-norm and `max` the only
+/// idempotent t-conorm — this is Green et al.'s fuzzy semiring, where every
+/// answer degree is a single bottleneck derivation.
 ///
 /// Best for intersections — `min` is the largest t-norm, so it preserves degree
 /// through AND.

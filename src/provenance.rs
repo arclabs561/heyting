@@ -267,7 +267,7 @@ fn witness<T: SelectiveOr>(
                 .iter()
                 .map(|b| witness::<T>(scorer, b, config, entity))
                 .collect::<Result<_, _>>()?;
-            // Idempotent ⟹ ⊗ = min: the conjunction's degree is the bottleneck.
+            // The conjunction's degree under `⊗` (min for Gödel: the bottleneck).
             let degree = ws.iter().map(Witness::degree).fold(T::top(), T::and);
             Ok(Witness::All {
                 branches: ws,

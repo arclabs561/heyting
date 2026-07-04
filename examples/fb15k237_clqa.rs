@@ -253,7 +253,7 @@ fn main() {
     );
 
     // The rest of the stack on the same model. Witness: why is the top hard
-    // answer of the first 2i query an answer? (Gödel: the Idempotent bound.)
+    // answer of the first 2i query an answer? (Gödel: selective ⊕, exact.)
     if let Some(q) = queries[2].1.first() {
         let answers = split_answers(&train_kg, &full_kg, q, 0.5);
         if let Some(&target) = answers.hard.iter().next() {
