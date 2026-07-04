@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.12.0] - 2026-07-04
+
+### Added
+
+- `TimeSet`: bitset carrier for discrete timestamp axes, closed under
+  union, intersection, and complement (the non-contiguous sets temporal
+  operators produce, which `TimeWindow` intervals cannot represent), with
+  the window vocabulary as constructors and TFLEX's set-level operators
+  (`after_all`, `before_all`, `between_all`; Lin et al., NeurIPS 2023).
+- `adapters::TemporalPointModel` (feature `tranz`): wraps a trained
+  `tranz::temporal::TemporalScorer` (TComplEx) with `TimeSet`-scoped hops
+  registered as virtual relations; hop degrees are existential over the
+  set, with the same sigmoid-temperature map as `PointModel`.
+- `icews14_temporal_clqa` example: windowed and non-reducible temporal
+  query types against an exact `TemporalKg` oracle, witness, and conformal
+  coverage; `scripts/fetch_icews14.sh` fetches the dataset.
+- `docs/papers.md`: mechanism-level summaries of every referenced paper,
+  linked per entry from the README reference list.
+
+### Removed
+
+- `truth::Idempotent`. The marker was purely descriptive: no API was
+  bounded by it (`explain_answer` requires the weaker `SelectiveOr`, which
+  is the actual witness-exactness condition), and the both-ops-idempotent
+  fact it encoded is now documented on `Godel`, the only lawful
+  implementor. Migration: replace `Idempotent` bounds with `SelectiveOr`.
+
 ## [0.11.0] - 2026-07-03
 
 ### Added
