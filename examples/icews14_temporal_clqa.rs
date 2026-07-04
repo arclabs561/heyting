@@ -35,6 +35,10 @@
 //! Without them this prints instructions and exits 0.
 //!
 //! Run: cargo run --release --features tranz --example icews14_temporal_clqa
+//!
+//! Other ICEWS-shaped datasets (e.g. ICEWS05-15 via
+//! `scripts/fetch_icews0515.sh`) run through the same harness with
+//! `ICEWS_DATA=data/icews05-15 ICEWS_EMB=data/icews0515-tcomplex`.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -55,16 +59,18 @@ const HALF_WINDOW: usize = 3;
 type Quad = (usize, usize, usize, usize);
 
 fn main() {
+    let data_dir = std::env::var("ICEWS_DATA").unwrap_or_else(|_| DATA.to_string());
+    let emb_dir = std::env::var("ICEWS_EMB").unwrap_or_else(|_| EMB.to_string());
     let (
         Some(raw),
         Some((ent_names, ent_vecs)),
         Some((rel_names, rel_vecs)),
         Some((times, time_vecs)),
     ) = (
-        load_splits(Path::new(DATA)),
-        tranz::io::import_embeddings(&Path::new(EMB).join("entities.tsv")).ok(),
-        tranz::io::import_embeddings(&Path::new(EMB).join("relations.tsv")).ok(),
-        tranz::io::import_embeddings(&Path::new(EMB).join("times.tsv")).ok(),
+        load_splits(Path::new(&data_dir)),
+        tranz::io::import_embeddings(&Path::new(&emb_dir).join("entities.tsv")).ok(),
+        tranz::io::import_embeddings(&Path::new(&emb_dir).join("relations.tsv")).ok(),
+        tranz::io::import_embeddings(&Path::new(&emb_dir).join("times.tsv")).ok(),
     )
     else {
         eprintln!("ICEWS14 data or trained embeddings not found.");
@@ -91,7 +97,7 @@ fn main() {
         .map(Vec::len)
         .filter(|w| w % 2 == 0 && *w > 0)
     else {
-        eprintln!("{EMB}/entities.tsv is empty or not complex-valued; retrain (see header)");
+        eprintln!("{emb_dir}/entities.tsv is empty or not complex-valued; retrain (see header)");
         return;
     };
     let dim = width / 2;
@@ -118,7 +124,7 @@ fn main() {
     let valid = to_ids(&raw.1);
     let test = to_ids(&raw.2);
     eprintln!(
-        "ICEWS14: {n_ent} entities, {n_rel} relations, {n_time} timestamps, \
+        "{data_dir}: {n_ent} entities, {n_rel} relations, {n_time} timestamps, \
          {}/{}/{} train/valid/test quads, dim {dim}",
         train.len(),
         valid.len(),
