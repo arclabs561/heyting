@@ -16,7 +16,7 @@ anything that answers a one-hop query as `[0, 1]` degrees plugs in through the
 `AtomicScorer` trait, so the same code runs over point embeddings, region
 embeddings, or a plain in-memory graph.
 
-## The logic is a typed algebra
+## The algebras
 
 Query degrees compose in a *residuated lattice*, chosen as a type parameter:
 
@@ -28,15 +28,14 @@ Query degrees compose in a *residuated lattice*, chosen as a type parameter:
 | `Viterbi` | `a · b` | `max(a, b)` | crisp |
 
 The residuum `a → b` is the Heyting implication the crate is named for; the
-residuation law `a ⊗ (a → b) ≤ b` is property-tested for every algebra. The
-negation column is one load-bearing choice (`Lukasiewicz` gives the soft
+residuation law `a ⊗ (a → b) ≤ b` is property-tested for every algebra. Two
+columns carry consequences. Negation: `Lukasiewicz` gives the soft
 `¬a = 1 − a` that ranking wants; the others give the crisp intuitionistic
-pseudo-complement). The disjunction column is the other: `Godel` and `Viterbi`
-pair their t-norm with `max`, which makes them commutative *semirings* in the
-provenance-theory sense (Green et al., PODS 2007), and that is what makes
-their answers explainable below. `Product` and `Lukasiewicz` are not semirings
-(their `⊗` does not distribute over their `⊕`); their degrees deliberately
-aggregate evidence across derivations instead.
+pseudo-complement. Disjunction: `Godel` and `Viterbi` pair their t-norm with
+`max`, making them commutative semirings (Green et al., PODS 2007), which is
+what the witness machinery below requires. `Product` and `Lukasiewicz` are
+not semirings (`⊗` does not distribute over `⊕`); their degrees aggregate
+evidence across derivations instead.
 
 ## Example
 
@@ -55,7 +54,7 @@ let top = answer_query_topk::<Godel>(&kg, &q, &QueryConfig::default(), 1);
 assert_eq!(top[0].0, 1);
 ```
 
-## Beyond ranking
+## Modules
 
 - **Planned, pruned evaluation** (`prune`): a `CandidateSource` (any serving
   index) proposes per-hop candidates; intersections evaluate most-selective
@@ -63,26 +62,26 @@ assert_eq!(top[0].0, 1);
   are identical to dense evaluation on the EPFO fragment; only the work
   changes.
 - **Answer sets with coverage guarantees** (`conformal`): split conformal
-  prediction over any scorer — calibrate on `(query, answer)` pairs, get
+  prediction over any scorer: calibrate on `(query, answer)` pairs, get
   answer sets containing the true answer with probability `1 − α` for
   exchangeable queries. On FB15k-237 with a trained DistMult (the
   `fb15k237_clqa` example): 84% held-out coverage at the 80% nominal level.
 - **Why-provenance witnesses** (`provenance`): for the semiring algebras
   (`Godel`, `Viterbi`), every answer's degree is realized by one best
-  derivation; `explain_answer` returns it — which facts, through which
-  intermediates — with witness degree equal to the engine degree exactly.
+  derivation; `explain_answer` returns it (which facts, through which
+  intermediates), with witness degree exactly equal to the engine degree.
   Negation is witnessed as a recorded refutation.
 - **Numeric literals** (`Query::given`): encode "attribute in `[lo, hi]`" as
   a degree vector and conjoin it with relation hops.
 - **Temporal scoping** (`temporal`): facts carry validity intervals; a
   `TimeWindow` (before/after/between, or relative to another fact) registers
   as a virtual relation id, so time-scoped hops compose through the ordinary
-  connectives — planning, pruning, conformal, and witnesses included.
+  connectives; planning, pruning, conformal, and witnesses all apply.
 - **Standard evaluation** (`eval`): the easy/hard answer split with filtered
   metrics, as in the Query2Box/BetaE protocol.
 
-`Query` is a tree, which is exactly the tree-form (acyclic) fragment of
-existential first-order queries — the class where this evaluation is exact.
+`Query` is a tree, which is the tree-form (acyclic) fragment of existential
+first-order queries, the class where this evaluation is exact.
 Cyclic queries are out of scope.
 
 ## Adapters
@@ -92,12 +91,12 @@ Cyclic queries are out of scope.
   sigmoid temperature for calibrated degrees.
 - Feature `subsume`: `adapters::BoxModel` scores Query2Box-style over trained
   box embeddings, and `BoxModel::materialize_explained` runs the query in the
-  geometry itself — exact box intersections, DNF unions (single regions
-  provably cannot represent unions in low dimension), no negation — returning
-  the answer region and its composition tree.
+  geometry itself: exact box intersections, DNF unions (a single box cannot
+  represent a union unless dimension scales with entity count), no negation.
+  Returns the answer region and its composition tree.
 
-`cargo run --release --features tranz --example fb15k237_clqa` runs the whole
-stack on real data: train a 1p model with the tranz CLI, compose queries here,
+`cargo run --release --features tranz --example fb15k237_clqa` runs the
+FB15k-237 example end to end: train a 1p model with the tranz CLI, compose queries here,
 score with the easy/hard protocol, print a witness and conformal coverage.
 
 ## Relationship to tranz
