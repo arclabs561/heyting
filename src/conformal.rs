@@ -24,6 +24,14 @@
 //! threshold per relation, Zhu et al., Findings ACL 2025) is a client-side
 //! refinement: call [`calibrate`] once per relation with that relation's
 //! examples.
+//!
+//! Off-seam readouts: [`calibrate_scores`] and [`answer_set_from_degrees`] are
+//! the scorer-agnostic core, taking raw nonconformity / degree vectors. A
+//! readout that cannot be expressed as one [`Query`] over the [`AtomicScorer`]
+//! seam (a conjunctive least-common-ancestor score formed geometrically from two
+//! anchors, for instance) is still conformalizable: compute its per-query
+//! degrees yourself and feed them in. [`calibrate`] and [`answer_set`] are the
+//! seam-bound convenience wrappers over that core.
 
 use crate::query::{answer_query, AtomicScorer, Query, QueryConfig};
 use crate::truth::Truth;
@@ -89,14 +97,48 @@ pub fn calibrate<T: Truth>(
         return Err(ConformalError::NoCalibrationExamples);
     }
     let n_entities = scorer.num_entities();
-    let mut scores = Vec::with_capacity(examples.len());
+    let mut nonconformities = Vec::with_capacity(examples.len());
     for (query, answer) in examples {
         if *answer >= n_entities {
             return Err(ConformalError::AnswerOutOfRange);
         }
         let degrees = answer_query::<T>(scorer, query, config);
-        scores.push((1.0 - degrees[*answer]).clamp(0.0, 1.0));
+        nonconformities.push(1.0 - degrees[*answer]);
     }
+    calibrate_scores(&nonconformities, alpha)
+}
+
+/// Calibrate a threshold directly from precomputed nonconformity scores.
+///
+/// The scorer-agnostic core of [`calibrate`]: given each calibration example's
+/// nonconformity (higher = worse fit, conventionally `1 - degree` but any
+/// exchangeable score works), return the finite-sample conformal threshold, the
+/// `ceil((n + 1) * (1 - alpha))`-th smallest nonconformity (clamped to
+/// `[0, 1]`), or `INFINITY` when the rank exceeds `n` (conservative full-set
+/// fallback).
+///
+/// Use this to conformalize a readout that does *not* fit the atomic
+/// [`AtomicScorer`] `project(anchor, relation)` seam that [`calibrate`] is built
+/// on: a conjunctive score formed geometrically from several anchors (an LCA
+/// join, an intersection materialized off-seam) cannot be expressed as one
+/// [`Query`], so compute its per-example nonconformities yourself and calibrate
+/// here, then form sets with [`answer_set_from_degrees`].
+///
+/// # Errors
+///
+/// [`ConformalError::InvalidAlpha`] unless `0 < alpha < 1`;
+/// [`ConformalError::NoCalibrationExamples`] on an empty slice.
+pub fn calibrate_scores(
+    nonconformities: &[f32],
+    alpha: f32,
+) -> Result<ConformalThreshold, ConformalError> {
+    if !(alpha > 0.0 && alpha < 1.0) {
+        return Err(ConformalError::InvalidAlpha);
+    }
+    if nonconformities.is_empty() {
+        return Err(ConformalError::NoCalibrationExamples);
+    }
+    let mut scores: Vec<f32> = nonconformities.iter().map(|s| s.clamp(0.0, 1.0)).collect();
     scores.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let n = scores.len();
@@ -124,9 +166,25 @@ pub fn answer_set<T: Truth>(
     config: &QueryConfig,
     threshold: &ConformalThreshold,
 ) -> Vec<(usize, f32)> {
+    let degrees = answer_query::<T>(scorer, query, config);
+    answer_set_from_degrees(&degrees, threshold)
+}
+
+/// The conformal answer set from a precomputed per-entity degree vector.
+///
+/// The scorer-agnostic core of [`answer_set`]: every entity whose degree reaches
+/// `1 - q̂` (from [`calibrate_scores`] or [`calibrate`] over the same readout),
+/// best first, ties broken by id. `degrees[i]` is entity `i`'s degree; the
+/// off-seam companion to [`calibrate_scores`] for conformalizing a readout the
+/// atomic [`AtomicScorer`] seam cannot express.
+pub fn answer_set_from_degrees(
+    degrees: &[f32],
+    threshold: &ConformalThreshold,
+) -> Vec<(usize, f32)> {
     let cutoff = 1.0 - threshold.qhat; // -inf when qhat is inf: everything.
-    let mut set: Vec<(usize, f32)> = answer_query::<T>(scorer, query, config)
-        .into_iter()
+    let mut set: Vec<(usize, f32)> = degrees
+        .iter()
+        .copied()
         .enumerate()
         .filter(|(_, d)| *d >= cutoff)
         .collect();
@@ -261,5 +319,60 @@ mod tests {
             calibrate::<Godel>(&kg, &[(Query::anchor(0, 0), 99)], &cfg, 0.1).unwrap_err(),
             ConformalError::AnswerOutOfRange
         );
+    }
+
+    /// The score-vector core reproduces the seam quantiles directly from raw
+    /// nonconformities {0.1, 0.2, 0.3, 0.4}, no scorer involved.
+    #[test]
+    fn calibrate_scores_matches_hand_computation() {
+        let nonconf = [0.1f32, 0.2, 0.3, 0.4];
+        // alpha = 0.25: rank ceil(3.75) = 4 -> qhat = 0.4.
+        assert!((calibrate_scores(&nonconf, 0.25).unwrap().qhat - 0.4).abs() < 1e-6);
+        // alpha = 0.5: rank ceil(2.5) = 3 -> qhat = 0.3.
+        assert!((calibrate_scores(&nonconf, 0.5).unwrap().qhat - 0.3).abs() < 1e-6);
+        // alpha = 0.01: rank 5 > 4 -> conservative full set.
+        assert!(calibrate_scores(&nonconf, 0.01).unwrap().qhat.is_infinite());
+        assert_eq!(
+            calibrate_scores(&[], 0.1).unwrap_err(),
+            ConformalError::NoCalibrationExamples
+        );
+        assert_eq!(
+            calibrate_scores(&nonconf, 1.0).unwrap_err(),
+            ConformalError::InvalidAlpha
+        );
+    }
+
+    /// The seam-bound calibrate is exactly its score core over `1 - degree`:
+    /// the kg's calibration degrees 0.9/0.8/0.7/0.6 give nonconformities
+    /// 0.1/0.2/0.3/0.4, so both paths must agree, proving the refactor
+    /// preserves behaviour.
+    #[test]
+    fn seam_calibrate_delegates_to_score_core() {
+        let kg = kg();
+        let cfg = QueryConfig::default();
+        let nonconf = [0.1f32, 0.2, 0.3, 0.4];
+        for &alpha in &[0.25f32, 0.5, 0.01] {
+            let seam = calibrate::<Godel>(&kg, &calibration(), &cfg, alpha).unwrap();
+            let core = calibrate_scores(&nonconf, alpha).unwrap();
+            assert_eq!(seam.qhat.is_infinite(), core.qhat.is_infinite());
+            if seam.qhat.is_finite() {
+                assert!((seam.qhat - core.qhat).abs() < 1e-6, "alpha {alpha}");
+            }
+        }
+    }
+
+    /// answer_set_from_degrees applies the `1 - qhat` cutoff to a raw degree
+    /// vector, best first with ties by id.
+    #[test]
+    fn answer_set_from_degrees_applies_cutoff() {
+        // qhat 0.3 -> cutoff degree >= 0.7.
+        let thr = calibrate_scores(&[0.1, 0.2, 0.3, 0.4], 0.5).unwrap();
+        let degrees = [0.9f32, 0.75, 0.7, 0.6, 0.95];
+        let ids: Vec<usize> = answer_set_from_degrees(&degrees, &thr)
+            .iter()
+            .map(|(e, _)| *e)
+            .collect();
+        // 0.95, 0.9, 0.75, 0.7 pass (best first); 0.6 does not.
+        assert_eq!(ids, vec![4, 0, 1, 2]);
     }
 }
