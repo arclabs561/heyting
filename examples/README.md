@@ -12,6 +12,7 @@ their data they print fetch/train instructions and exit 0.
 | See interval-validity temporal hops, no training | `temporal_query` |
 | Run the full stack on FB15k-237 with a trained DistMult | `fb15k237_clqa` |
 | Run the temporal stack on ICEWS with a trained TComplEx | `icews14_temporal_clqa` |
+| Score the published BetaE benchmark files, all 14 types | `betae_fb15k237` |
 
 ## `taxonomy_query`: the connectives on a toy graph
 
@@ -56,18 +57,20 @@ cargo run --release --features tranz --example fb15k237_clqa
 
 ```text
 type    n    MRR(P)    H@1    H@3   H@10     MRR(G)   H@10
-1p    200     0.378  0.284  0.419  0.581      0.378  0.581
-2p    165     0.236  0.141  0.260  0.448      0.220  0.407
-2i    200     0.534  0.405  0.614  0.777      0.460  0.660
-3i    200     0.688  0.557  0.768  0.914      0.548  0.774
-2p!   168     0.262  0.172  0.282  0.447      0.236  0.421
-2i!   200     0.383  0.270  0.420  0.630      0.409  0.613
-3i!   200     0.415  0.286  0.471  0.707      0.468  0.724
+1p    200     0.389  0.294  0.441  0.555      0.389  0.555
+2p    165     0.238  0.157  0.269  0.393      0.224  0.375
+2i    200     0.566  0.429  0.659  0.822      0.467  0.684
+3i    200     0.731  0.600  0.843  0.948      0.553  0.767
+2p!   168     0.232  0.155  0.257  0.374      0.216  0.354
+2i!   200     0.361  0.257  0.383  0.606      0.388  0.604
+3i!   200     0.385  0.277  0.416  0.621      0.426  0.661
 
-conformal 1p answer sets: qhat 0.1004 on 300 valid pairs; held-out coverage 84% (nominal 80%)
+conformal 1p answer sets: qhat 0.3043 on 300 valid pairs; held-out coverage 80% (nominal 80%)
 ```
 
-The plain-to-`!` drop (2i 0.534 -> 2i! 0.383) is the honest measure of
+The model is a DistMult d 256 trained with reciprocals and the weighted
+nuclear-3 regularizer (`--reciprocals --n3-reg 0.0025 --init-scale 0.01`).
+The plain-to-`!` drop (2i 0.566 -> 2i! 0.361) is the honest measure of
 multi-hop composition.
 
 ## `icews14_temporal_clqa`: the temporal stack on real events
@@ -102,4 +105,36 @@ ICEWS05-15 (5x the quads, an 11x time axis) runs through the same harness:
 scripts/fetch_icews0515.sh  # then train per the example header (batch 2048)
 ICEWS_DATA=data/icews05-15 ICEWS_EMB=data/icews0515-tcomplex \
   cargo run --release --features tranz --example icews14_temporal_clqa
+```
+
+## `betae_fb15k237`: the published benchmark files, evaluated exactly
+
+Loads the KGReasoning pickles (queries + easy/hard answer sets) and scores
+all 14 BetaE query types file-exactly, so rows compare directly against the
+BetaE / CQD / QTO FB15k-237 tables (theirs use ComplEx-N3 at d >= 1000;
+compare shapes, not absolutes). Negation rows exclude the negated branch's
+top-50 candidates via a crisp `Query::given` mask; soft `1 - sigmoid`
+negation over uncalibrated degrees measures at the random floor.
+
+```bash
+scripts/fetch_betae_fb15k237.sh   # ~1.4 GB download
+cargo run --release --features tranz --example betae_fb15k237
+```
+
+```text
+type     n        MRR    H@1    H@3   H@10     MRR(G)   H@10
+1p     300   0.329 (P)  0.235  0.374  0.500      0.329  0.500
+2p     300   0.025 (P)  0.010  0.024  0.053      0.022  0.044
+3p     300   0.040 (P)  0.018  0.036  0.076      0.036  0.073
+2i     300   0.167 (P)  0.097  0.194  0.289      0.153  0.270
+3i     300   0.180 (P)  0.122  0.199  0.282      0.157  0.259
+pi     300   0.120 (P)  0.071  0.121  0.213      0.102  0.178
+ip     300   0.126 (P)  0.075  0.129  0.230      0.088  0.193
+2u     300   0.071 (P)  0.025  0.073  0.148      0.070  0.145
+up     300   0.034 (P)  0.018  0.031  0.059      0.029  0.054
+2in    300   0.010(P¬)  0.000  0.002  0.007      0.000  0.000
+3in    300   0.011(P¬)  0.004  0.005  0.011      0.000  0.000
+inp    300   0.016(P¬)  0.005  0.008  0.035      0.000  0.000
+pin    300   0.009(P¬)  0.002  0.003  0.018      0.000  0.000
+pni    300   0.022(P¬)  0.006  0.009  0.035      0.000  0.000
 ```

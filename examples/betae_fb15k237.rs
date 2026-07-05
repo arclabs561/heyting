@@ -14,10 +14,11 @@
 //! All 14 BetaE query types are tree-form, hence expressible: chains
 //! (1p/2p/3p), intersections (2i/3i), projected intersections (pi/ip),
 //! unions (2u/up), and the five negation types (2in/3in/inp/pin/pni).
-//! EPFO types score under Product and Gödel. Negation types score
-//! CQD-style: product ⊗ everywhere with the standard negation `1 − x`,
-//! composed through existing machinery (the negated branch is scored
-//! separately and injected as a `Query::given` leaf).
+//! EPFO types score under Product and Gödel. Negation types score under
+//! Product with the negated branch as a crisp top-k exclusion mask
+//! injected via `Query::given` (see the negation note in `main`: soft
+//! `1 − sigmoid` negation over uncalibrated degrees is measurably at the
+//! random floor at any temperature).
 //!
 //! Data-gated: needs `data/FB15k-237-betae/` (run
 //! `scripts/fetch_betae_fb15k237.sh`, ~1.4 GB download) and the trained
@@ -39,6 +40,8 @@ use serde_pickle::{HashableValue, Value};
 const DIR: &str = "data/FB15k-237-betae";
 const EMB: &str = "data/fb15k237-distmult";
 const PER_TYPE: usize = 300;
+/// Entities excluded by a negated branch (see the negation note in main).
+const NEG_TOP_K: usize = 50;
 
 fn main() {
     let (Some(id2ent), Some(id2rel)) = (
@@ -122,8 +125,8 @@ fn main() {
         eprintln!("{EMB}/entities.tsv is empty; retrain (see fb15k237_clqa.rs header)");
         return;
     };
-    let model =
-        PointModel::with_temperature(tranz::DistMult::from_vecs(ent_vecs, rel_vecs, dim), 5.0);
+    let distmult = tranz::DistMult::from_vecs(ent_vecs, rel_vecs, dim);
+    let model = PointModel::with_temperature(distmult, 5.0);
     let cfg = QueryConfig { beam_k: 32 };
 
     let Value::Dict(queries) = queries else {
@@ -142,12 +145,26 @@ fn main() {
     // Negation branches evaluate CQD-style: product ⊗ everywhere, with the
     // standard negation 1 − x injected as a Given leaf (the terminal 'n'
     // marker builds the un-negated branch, scores it, and complements).
+    // Negation as top-k exclusion. Soft `1 − sigmoid` negation is dead on
+    // arrival with uncalibrated embedding degrees, at ANY temperature:
+    // hard answers of A ∧ ¬B are type-compatible with B's answers by
+    // construction, so the model over-scores them on the negated atom
+    // (measured on this checkpoint: a gold ranked 392 of 14541 under B
+    // still carried sigmoid 0.993 at temperature 1, and negation MRR sat
+    // at the random floor). Published systems recover exactly by
+    // calibrating so that only near-top ranks count as "true" (QTO); the
+    // transparent version of that is a crisp mask excluding the negated
+    // branch's top-k candidates and passing everyone else.
     let std_neg = |sub: Query| -> Option<Query> {
-        let d: Vec<f32> = answer_query::<Product>(&model, &sub, &cfg)
-            .iter()
-            .map(|x| 1.0 - x)
-            .collect();
-        Some(Query::given(d))
+        let d = answer_query::<Product>(&model, &sub, &cfg);
+        let mut sorted: Vec<f32> = d.clone();
+        sorted.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        let theta = sorted.get(NEG_TOP_K).copied().unwrap_or(f32::MAX);
+        Some(Query::given(
+            d.iter()
+                .map(|&x| if x > theta { 0.0 } else { 1.0 })
+                .collect(),
+        ))
     };
     let mut per_type: HashMap<String, Vec<(Query, QueryAnswers)>> = HashMap::new();
     let mut skipped_unmapped = 0usize;
@@ -185,10 +202,26 @@ fn main() {
                 let mut top: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
                 top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 eprintln!(
-                    "DEBUG {name}: instance {q:?}\n  query {query:?}\n  gold {gold} score {} rank {rank}; top: {:?}",
-                    scores[gold],
-                    &top[..3]
+                    "DEBUG {name}: instance {q:?}\n  gold {gold} final {} rank {rank}; top-1 {:?}",
+                    scores[gold], top[0]
                 );
+                if let Query::Intersection { branches } = &query {
+                    for (i, b) in branches.iter().enumerate() {
+                        match b {
+                            Query::Given { degrees } => eprintln!(
+                                "  branch {i} Given(1-B): gold {} top1 {}",
+                                degrees[gold], degrees[top[0].0]
+                            ),
+                            other => {
+                                let d = answer_query::<Product>(&model, other, &cfg);
+                                eprintln!(
+                                    "  branch {i} {other:?}: gold {} top1 {}",
+                                    d[gold], d[top[0].0]
+                                );
+                            }
+                        }
+                    }
+                }
             }
             bucket.push((query, answers));
         }
@@ -238,8 +271,9 @@ fn main() {
         "\nSame files as BetaE (NeurIPS 2020) / CQD (ICLR 2021) / QTO (ICML\n\
          2023) FB15k-237 tables: numbers are directly comparable. EPFO rows\n\
          score under Product (P) with Godel (G) alongside; negation rows\n\
-         (P¬) use product with the standard negation 1 - x injected as a\n\
-         Given leaf. The DistMult here is small (d 256); CQD/QTO tables use\n\
+         (P¬) exclude the negated branch's top-{NEG_TOP_K} candidates via a\n\
+         crisp Given mask (uncalibrated soft negation ranks at the random\n\
+         floor). The DistMult here is small (d 256); CQD/QTO tables use\n\
          ComplEx-N3 at d >= 1000, so compare shapes, not absolutes."
     );
 }
