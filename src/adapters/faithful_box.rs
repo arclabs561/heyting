@@ -3,8 +3,8 @@ use crate::query::AtomicScorer;
 
 /// Atomic scorer over faithful EL++ concept boxes.
 ///
-/// The counterpart to [`BoxModel`](super::BoxModel): there entities are points
-/// and each relation is a Query2Box `(translation, offset)` pair; here entities
+/// The counterpart to the Query2Box `BoxModel` (feature `subsume`): there
+/// entities are points and each relation is a `(translation, offset)` pair; here entities
 /// themselves are boxes and the sole relation is graded subsumption `C ⊑ ?`,
 /// the faithful EL++ geometry where box containment *is* the subsumption order.
 ///
