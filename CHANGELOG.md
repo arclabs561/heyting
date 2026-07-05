@@ -1,14 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
-### Changed
-
-- `TemporalPointModel` hops fold their existential minimum through
-  `tranz::temporal::TemporalScorer::score_all_tails_over` (batched and
-  rayon-parallel in tranz 0.7.2), removing the per-timestamp scoring loop
-  that made not-during hops on long axes the harness bottleneck. Requires
-  `tranz >= 0.7.2`.
+## [0.13.0] - 2026-07-04
 
 ### Added
 
@@ -16,8 +8,26 @@
   (degrees over the timestamp axis for "when does `(h, r, t)` hold"),
   TFLEX's time-projection operator restricted to concrete anchors, and
   `TimeSet::from_degrees` to carry the answer back into set logic, so a
-  PREDICTED event time can anchor After/Before/Between hops. Requires
-  `tranz >= 0.7.1` (the `score_all_times` seam).
+  PREDICTED event time can anchor After/Before/Between hops.
+- `betae_fb15k237` example: the KGReasoning/BetaE FB15k-237 query files
+  evaluated file-exactly across all 14 query types, with negation as
+  top-k exclusion (soft `1 − sigmoid` negation over uncalibrated degrees
+  measures at the random floor). `scripts/fetch_betae_fb15k237.sh`
+  fetches and converts the pickles.
+- `el_clqa` / `el_clqa_conformal` examples: graded EL++ subsumption CLQA
+  over region embeddings (concept boxes, graded `C ⊑ t` as the atomic
+  projection), with conformal calibration over a trained model.
+- ICEWS05-15 support in the temporal example (`ICEWS_DATA`/`ICEWS_EMB`
+  env overrides, `scripts/fetch_icews0515.sh`) and `examples/README.md`
+  with captured outputs.
+
+### Changed
+
+- `TemporalPointModel` hops fold their existential minimum through
+  `tranz::temporal::TemporalScorer::score_all_tails_over` (batched and
+  rayon-parallel), removing the per-timestamp scoring loop that made
+  not-during hops on long axes the harness bottleneck (ICEWS05-15
+  harness: ~53 min → 140 s). Requires `tranz >= 0.7.2`.
 
 ## [0.12.0] - 2026-07-04
 
