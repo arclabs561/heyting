@@ -10,7 +10,7 @@ use crate::query::AtomicScorer;
 /// degree via `exp(-distance / temperature)`: `1` at the box center,
 /// decaying with distance outside.
 ///
-/// This is the box counterpart of [`PointModel`](super::PointModel):
+/// This is the box counterpart of the `PointModel` (feature `tranz`):
 /// where that maps arbitrary link-prediction scores through a sigmoid,
 /// boxes give a geometric membership degree. Chains, intersections, and
 /// unions still compose in the engine's [`crate::Truth`] algebra
