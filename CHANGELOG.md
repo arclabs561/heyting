@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.14.0] - 2026-07-06
+
+### Added
+
+- `adapters::FaithfulBoxModel`: dependency-free faithful-EL box subsumption
+  scorer, where entities are boxes and `project(anchor, relation)` returns
+  graded box-inclusion degrees.
+- `conformal::calibrate_scores` and
+  `conformal::answer_set_from_degrees`: scorer-agnostic conformal core for
+  readouts that do not fit the atomic `AtomicScorer` seam. The existing
+  `calibrate` and `answer_set` APIs now delegate to this core.
+- `el_clqa_gated_conformal` example: conformal LCA answer sets over
+  `subsume` 0.15's gated box readout.
+
+### Fixed
+
+- Cross-feature intra-doc links in the adapters module now build under
+  feature subsets such as `--features subsume`.
+
 ## [0.13.0] - 2026-07-04
 
 ### Added

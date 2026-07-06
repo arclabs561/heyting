@@ -4,7 +4,7 @@ Complex logical query answering over knowledge graph embeddings.
 
 ```toml
 [dependencies]
-heyting = "0.13"
+heyting = "0.14"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
@@ -70,6 +70,8 @@ assert_eq!(top[0].0, 1);
   answer sets containing the true answer with probability `1 − α` for
   exchangeable queries. On FB15k-237 with a trained DistMult (the
   `fb15k237_clqa` example): 84% held-out coverage at the 80% nominal level.
+  The scorer-agnostic core also calibrates readouts that do not fit the
+  atomic one-hop scorer seam.
 - **Witnesses** (`provenance`): which facts, through which intermediates,
   made an answer true ("why-provenance" in the database-theory sense). For
   the semiring algebras (`Godel`, `Viterbi`) every answer's degree is
@@ -107,6 +109,9 @@ literature); cyclic query graphs are out of scope.
   geometry itself: exact box intersections, DNF unions (a single box cannot
   represent a union unless dimension scales with entity count), no negation.
   Returns the answer region and its composition tree.
+- `adapters::FaithfulBoxModel` is dependency-free and scores faithful EL-style
+  concept boxes by graded inclusion (`C ⊑ D`), for ontology-shaped query
+  answering over region embeddings.
 
 `cargo run --release --features tranz --example fb15k237_clqa` runs the
 FB15k-237 example end to end: train a 1p model with the tranz CLI, compose
