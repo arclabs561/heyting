@@ -144,19 +144,15 @@ pub struct Godel;
 impl Truth for Godel {
     #[inline]
     fn and(a: f32, b: f32) -> f32 {
-        a.min(b)
+        tnorms::LogicFamily::Godel.tnorm_f32(a, b)
     }
     #[inline]
     fn or(a: f32, b: f32) -> f32 {
-        a.max(b)
+        tnorms::LogicFamily::Godel.tconorm_f32(a, b)
     }
     #[inline]
     fn residuum(a: f32, b: f32) -> f32 {
-        if a <= b {
-            1.0
-        } else {
-            b
-        }
+        tnorms::LogicFamily::Godel.residuum_f32(a, b)
     }
 }
 
@@ -171,20 +167,15 @@ pub struct Product;
 impl Truth for Product {
     #[inline]
     fn and(a: f32, b: f32) -> f32 {
-        a * b
+        tnorms::LogicFamily::Product.tnorm_f32(a, b)
     }
     #[inline]
     fn or(a: f32, b: f32) -> f32 {
-        a + b - a * b
+        tnorms::LogicFamily::Product.tconorm_f32(a, b)
     }
     #[inline]
     fn residuum(a: f32, b: f32) -> f32 {
-        if a <= b {
-            1.0
-        } else {
-            // a > b ≥ 0 implies a > 0, so the division is safe.
-            b / a
-        }
+        tnorms::LogicFamily::Product.residuum_f32(a, b)
     }
 }
 
@@ -202,19 +193,15 @@ pub struct Viterbi;
 impl Truth for Viterbi {
     #[inline]
     fn and(a: f32, b: f32) -> f32 {
-        a * b
+        tnorms::LogicFamily::Product.tnorm_f32(a, b)
     }
     #[inline]
     fn or(a: f32, b: f32) -> f32 {
-        a.max(b)
+        tnorms::LogicFamily::Godel.tconorm_f32(a, b)
     }
     #[inline]
     fn residuum(a: f32, b: f32) -> f32 {
-        if a <= b {
-            1.0
-        } else {
-            b / a
-        }
+        tnorms::LogicFamily::Product.residuum_f32(a, b)
     }
 }
 
@@ -230,15 +217,15 @@ pub struct Lukasiewicz;
 impl Truth for Lukasiewicz {
     #[inline]
     fn and(a: f32, b: f32) -> f32 {
-        (a + b - 1.0).max(0.0)
+        tnorms::LogicFamily::Lukasiewicz.tnorm_f32(a, b)
     }
     #[inline]
     fn or(a: f32, b: f32) -> f32 {
-        (a + b).min(1.0)
+        tnorms::LogicFamily::Lukasiewicz.tconorm_f32(a, b)
     }
     #[inline]
     fn residuum(a: f32, b: f32) -> f32 {
-        (1.0 - a + b).min(1.0)
+        tnorms::LogicFamily::Lukasiewicz.residuum_f32(a, b)
     }
 }
 
@@ -315,6 +302,61 @@ mod tests {
                 "residuum not ⊤ when {a} ≤ {b}"
             );
         }
+    }
+
+    #[test]
+    fn truth_algebras_delegate_to_tnorms() {
+        let a = 0.7;
+        let b = 0.4;
+
+        assert_eq!(Godel::and(a, b), tnorms::LogicFamily::Godel.tnorm_f32(a, b));
+        assert_eq!(
+            Godel::or(a, b),
+            tnorms::LogicFamily::Godel.tconorm_f32(a, b)
+        );
+        assert_eq!(
+            Godel::residuum(a, b),
+            tnorms::LogicFamily::Godel.residuum_f32(a, b)
+        );
+
+        assert_eq!(
+            Product::and(a, b),
+            tnorms::LogicFamily::Product.tnorm_f32(a, b)
+        );
+        assert_eq!(
+            Product::or(a, b),
+            tnorms::LogicFamily::Product.tconorm_f32(a, b)
+        );
+        assert_eq!(
+            Product::residuum(a, b),
+            tnorms::LogicFamily::Product.residuum_f32(a, b)
+        );
+
+        assert_eq!(
+            Lukasiewicz::and(a, b),
+            tnorms::LogicFamily::Lukasiewicz.tnorm_f32(a, b)
+        );
+        assert_eq!(
+            Lukasiewicz::or(a, b),
+            tnorms::LogicFamily::Lukasiewicz.tconorm_f32(a, b)
+        );
+        assert_eq!(
+            Lukasiewicz::residuum(a, b),
+            tnorms::LogicFamily::Lukasiewicz.residuum_f32(a, b)
+        );
+
+        assert_eq!(
+            Viterbi::and(a, b),
+            tnorms::LogicFamily::Product.tnorm_f32(a, b)
+        );
+        assert_eq!(
+            Viterbi::or(a, b),
+            tnorms::LogicFamily::Godel.tconorm_f32(a, b)
+        );
+        assert_eq!(
+            Viterbi::residuum(a, b),
+            tnorms::LogicFamily::Product.residuum_f32(a, b)
+        );
     }
 
     proptest! {

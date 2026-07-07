@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2] - 2026-07-07
+
+### Changed
+
+- The `Truth` algebra implementations now delegate their standard t-norm,
+  t-conorm, and residuum formulas to `tnorms`.
+
 ## [0.15.1] - 2026-07-07
 
 ### Changed

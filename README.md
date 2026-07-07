@@ -11,7 +11,7 @@ point-embedding model, a region model, or a plain in-memory graph.
 
 ```toml
 [dependencies]
-heyting = "0.15.1"
+heyting = "0.15.2"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
@@ -78,8 +78,10 @@ The algebra is chosen as a type parameter:
 | `Viterbi` | `a * b` | `max(a, b)` | crisp |
 
 All algebras implement implication through the residuum `a -> b`, with property
-tests for `a * (a -> b) <= b`. `Godel` and `Viterbi` are also the algebras used
-for exact witness extraction, because their disjunction selects a single best
+tests for `a * (a -> b) <= b`. The shared t-norm and residuum formulas come
+from `tnorms`; this crate adds the typed `Truth` trait, query evaluation, and
+provenance constraints. `Godel` and `Viterbi` are also the algebras used for
+exact witness extraction, because their disjunction selects a single best
 derivation.
 
 ## Adapters
