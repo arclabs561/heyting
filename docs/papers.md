@@ -1,7 +1,7 @@
-# Papers
+# Implementation Notes
 
-What each paper referenced by the README actually shows, and what this crate
-takes from it. One entry per reference, in the same order.
+This file records what each reference contributed to the implementation. It is
+not required reading for using the crate.
 
 ### Metamathematics of Fuzzy Logic (Hajek, 1998)
 
