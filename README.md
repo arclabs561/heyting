@@ -78,11 +78,11 @@ The algebra is chosen as a type parameter:
 | `Viterbi` | `a * b` | `max(a, b)` | crisp |
 
 All algebras implement implication through the residuum `a -> b`, with property
-tests for `a * (a -> b) <= b`. The shared t-norm and residuum formulas come
-from `tnorms`; this crate adds the typed `Truth` trait, query evaluation, and
-provenance constraints. `Godel` and `Viterbi` are also the algebras used for
-exact witness extraction, because their disjunction selects a single best
-derivation.
+tests for the adjunction `and(a, c) <= b` iff `c <= residuum(a, b)`. The shared
+t-norm and residuum formulas come from `tnorms`; this crate adds the typed
+`Truth` trait, query evaluation, and provenance constraints. `Godel` and
+`Viterbi` are also the algebras used for exact witness extraction, because
+their disjunction selects a single best derivation.
 
 ## Adapters
 
