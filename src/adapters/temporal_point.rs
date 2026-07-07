@@ -118,6 +118,30 @@ impl<S: tranz::temporal::TemporalScorer> AtomicScorer for TemporalPointModel<S> 
             .map(|&e| sigmoid(-e / self.temperature))
             .collect()
     }
+
+    fn project_subset(&self, anchor: usize, relation: usize, candidates: &[usize]) -> Vec<f32> {
+        let n = self.model.num_entities();
+        let Some((base, times)) = self.resolve(relation) else {
+            return vec![0.0; candidates.len()];
+        };
+        if anchor >= n || times.is_empty() {
+            return vec![0.0; candidates.len()];
+        }
+        let taus: Vec<usize> = times.iter().collect();
+        candidates
+            .iter()
+            .map(|&tail| {
+                if tail >= n {
+                    return 0.0;
+                }
+                let best = taus
+                    .iter()
+                    .map(|&tau| self.model.score(anchor, base, tail, tau))
+                    .fold(f32::INFINITY, f32::min);
+                sigmoid(-best / self.temperature)
+            })
+            .collect()
+    }
 }
 
 /// Numerically stable logistic sigmoid.
@@ -174,6 +198,17 @@ mod tests {
         // The base relation is unconstrained: both facts admit.
         let s = answer_query::<Godel>(&m, &Query::anchor(0, 0), &cfg);
         assert!(s[1] > 0.99 && s[2] > 0.99, "{s:?}");
+    }
+
+    #[test]
+    fn temporal_point_subset_matches_dense_windowed_projection() {
+        let mut m = TemporalPointModel::new(Planted);
+        let late = m.windowed(0, TimeSet::after(2, 4)).unwrap();
+        let dense = m.project(0, late);
+        assert_eq!(
+            m.project_subset(0, late, &[2, 1, 99]),
+            vec![dense[2], dense[1], 0.0]
+        );
     }
 
     /// The non-contiguous set intervals cannot represent: NOT-during

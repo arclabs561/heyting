@@ -61,6 +61,20 @@ impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
             .map(|&s| sigmoid(-s / self.temperature))
             .collect()
     }
+
+    fn project_subset(&self, anchor: usize, relation: usize, candidates: &[usize]) -> Vec<f32> {
+        let n = self.model.num_entities();
+        candidates
+            .iter()
+            .map(|&tail| {
+                if tail < n {
+                    sigmoid(-self.model.score(anchor, relation, tail) / self.temperature)
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
 }
 
 /// Numerically stable logistic sigmoid.
@@ -102,5 +116,18 @@ mod tests {
             &QueryConfig::default(),
         );
         assert!(neg.iter().all(|&s| (0.0..=1.0).contains(&s)));
+    }
+
+    #[test]
+    fn point_model_subset_matches_dense_projection() {
+        let ent = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+        let rel = vec![vec![1.0, 1.0]];
+        let scorer = PointModel::new(tranz::DistMult::from_vecs(ent, rel, 2));
+
+        let dense = scorer.project(0, 0);
+        assert_eq!(
+            scorer.project_subset(0, 0, &[2, 0, 99]),
+            vec![dense[2], dense[0], 0.0]
+        );
     }
 }

@@ -63,7 +63,8 @@ pub mod truth;
 
 pub use abduce::{abduce, AbduceConfig, Hypothesis};
 pub use conformal::{
-    answer_set, calibrate, empirical_coverage, ConformalError, ConformalThreshold,
+    answer_set, answer_set_from_scored_pool, calibrate, empirical_coverage, ConformalError,
+    ConformalThreshold,
 };
 pub use eval::{crisp_answers, hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
 pub use kg::FuzzyKg;

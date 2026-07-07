@@ -196,6 +196,40 @@ pub fn answer_set_from_degrees(
     set
 }
 
+/// The conformal answer set from a sparse scored candidate pool.
+///
+/// This is the candidate-pool companion to [`answer_set_from_degrees`]. It
+/// applies the same `degree >= 1 - q̂` cutoff, but only over candidates the
+/// caller supplied. When `q̂` is infinite, the conservative fallback is the full
+/// candidate pool, not every possible entity. If a candidate id appears more
+/// than once, the highest supplied degree is retained.
+pub fn answer_set_from_scored_pool(
+    scored: &[(usize, f32)],
+    threshold: &ConformalThreshold,
+) -> Vec<(usize, f32)> {
+    let cutoff = 1.0 - threshold.qhat;
+    let mut best_by_id = std::collections::BTreeMap::new();
+    for &(entity, degree) in scored {
+        if degree >= cutoff {
+            best_by_id
+                .entry(entity)
+                .and_modify(|best| {
+                    if degree > *best {
+                        *best = degree;
+                    }
+                })
+                .or_insert(degree);
+        }
+    }
+    let mut set: Vec<(usize, f32)> = best_by_id.into_iter().collect();
+    set.sort_unstable_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    set
+}
+
 /// Fraction of `(query, true answer)` pairs whose answer set contains the
 /// true answer. On exchangeable held-out pairs this should be at least
 /// `1 - alpha` up to finite-sample noise.
@@ -374,5 +408,29 @@ mod tests {
             .collect();
         // 0.95, 0.9, 0.75, 0.7 pass (best first); 0.6 does not.
         assert_eq!(ids, vec![4, 0, 1, 2]);
+    }
+
+    /// answer_set_from_scored_pool applies the conformal cutoff to only the
+    /// candidate ids supplied by the caller.
+    #[test]
+    fn answer_set_from_scored_pool_applies_cutoff_to_sparse_candidates() {
+        let thr = calibrate_scores(&[0.1, 0.2, 0.3, 0.4], 0.5).unwrap();
+        let scored = [(10usize, 0.9f32), (5, 0.65), (7, 0.75), (10, 0.85)];
+        let set = answer_set_from_scored_pool(&scored, &thr);
+        assert_eq!(set, vec![(10, 0.9), (7, 0.75)]);
+    }
+
+    /// With too little calibration data, the sparse-pool fallback includes the
+    /// full candidate pool rather than pretending unscored entities exist.
+    #[test]
+    fn answer_set_from_scored_pool_full_fallback_stays_inside_pool() {
+        let thr = ConformalThreshold {
+            qhat: f32::INFINITY,
+            alpha: 0.1,
+            n_calibration: 1,
+        };
+        let scored = [(9usize, 0.1f32), (3, 0.8)];
+        let set = answer_set_from_scored_pool(&scored, &thr);
+        assert_eq!(set, vec![(3, 0.8), (9, 0.1)]);
     }
 }
