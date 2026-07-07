@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.0] - 2026-07-06
+
+### Added
+
+- `conformal::answer_set_from_scored_pool`: sparse candidate-pool conformal
+  answer sets for readouts that only score retrieved candidates.
+
+### Changed
+
+- `adapters::PointModel` and `adapters::TemporalPointModel` now override
+  `AtomicScorer::project_subset`, so candidate-pruned query evaluation can
+  score supplied candidates directly for `tranz` backends.
+
 ## [0.14.0] - 2026-07-06
 
 ### Added
