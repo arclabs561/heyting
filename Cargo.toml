@@ -1,6 +1,6 @@
 [package]
 name = "heyting"
-version = "0.15.0"
+version = "0.15.1"
 edition = "2021"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -19,7 +19,7 @@ publish = true
 tranz = { version = "0.7.2", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings, and the
 # subsume::clqa gated LCA readout for off-seam conjunctive conformal.
-subsume = { version = "0.15", default-features = false, optional = true }
+subsume = { version = "0.17", default-features = false, optional = true }
 
 [features]
 # Enables `adapters::PointModel`, wrapping a `tranz::Scorer`.

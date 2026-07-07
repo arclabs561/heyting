@@ -75,7 +75,7 @@ multi-hop composition.
 
 ## `icews14_temporal_clqa`: the temporal stack on real events
 
-Trained TComplEx (tranz 0.7.1, with the Lacroix et al. regularizers;
+Trained TComplEx (tranz >= 0.7.2, with the Lacroix et al. regularizers;
 link-prediction test MRR 0.520) supplies time-scoped atom degrees; windowed
 and not-during query types run against an exact `TemporalKg` oracle; closes
 with a witness, a time-projection demo, and conformal coverage.

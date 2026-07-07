@@ -5,7 +5,7 @@
 //! seam. The conjunctive least-common-ancestor query "X such that A ⊑ X AND
 //! B ⊑ X" cannot use that seam: the winning readout forms the *join* (smallest
 //! enclosing box) of A and B geometrically first, then ranks candidates by
-//! containment-gated proximity to it (subsume 0.15's [`subsume::clqa::BoxClqa`],
+//! containment-gated proximity to it ([`subsume::clqa::BoxClqa`],
 //! which beats both plain containment and a KGE point baseline on GALEN). A
 //! containment-min intersection over the atomic seam saturates and fails here.
 //!

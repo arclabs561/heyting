@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1] - 2026-07-07
+
+### Changed
+
+- The optional `subsume` feature now depends on `subsume` 0.17, matching the
+  geometry crate's post-cleanup surface.
+
 ## [0.15.0] - 2026-07-06
 
 ### Added
@@ -25,7 +32,7 @@
   readouts that do not fit the atomic `AtomicScorer` seam. The existing
   `calibrate` and `answer_set` APIs now delegate to this core.
 - `el_clqa_gated_conformal` example: conformal LCA answer sets over
-  `subsume` 0.15's gated box readout.
+  `subsume`'s gated box readout.
 
 ### Fixed
 
