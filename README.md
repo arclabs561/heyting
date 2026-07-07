@@ -11,7 +11,7 @@ point-embedding model, a region model, or a plain in-memory graph.
 
 ```toml
 [dependencies]
-heyting = "0.15.2"
+heyting = "0.15.3"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
