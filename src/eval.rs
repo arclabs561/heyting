@@ -16,8 +16,8 @@
 //!
 //! # Query-shape names
 //!
-//! The standard taxonomy names query shapes by their DAG; the [`Query`]
-//! constructors compose them:
+//! The standard taxonomy names tree-form query shapes; the [`Query`]
+//! constructors build those shapes:
 //!
 //! | Name | Shape | Construction |
 //! |---|---|---|
@@ -32,8 +32,9 @@
 
 use std::collections::BTreeSet;
 
-use crate::query::{answer_query, AtomicScorer, Query, QueryConfig};
+use crate::query::{answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig};
 use crate::truth::Godel;
+use crate::Truth;
 
 /// The easy/hard answer split for one query.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -57,6 +58,32 @@ pub struct QueryMetrics {
     pub hits10: f32,
     /// Number of hard answers scored.
     pub n_hard: usize,
+}
+
+/// Query answers plus optional cardinality metadata.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct QueryAnswerReport {
+    /// Top answers sorted by degree descending, then entity id ascending.
+    pub top_k: Vec<(usize, f32)>,
+    /// Degree for every entity in scorer order.
+    pub degrees: Vec<f32>,
+    /// Optional predicted answer cardinality. Geometric materializers can
+    /// populate this from region volume; plain degree scorers leave it absent.
+    pub predicted_cardinality: Option<f32>,
+}
+
+/// Evaluate a query and return both the full degree vector and top-k answers.
+pub fn answer_query_report<T: Truth>(
+    scorer: &dyn AtomicScorer,
+    query: &Query,
+    config: &QueryConfig,
+    k: usize,
+) -> QueryAnswerReport {
+    QueryAnswerReport {
+        top_k: answer_query_topk::<T>(scorer, query, config, k),
+        degrees: answer_query::<T>(scorer, query, config),
+        predicted_cardinality: None,
+    }
 }
 
 /// Entities whose crisp query degree reaches `threshold`.
@@ -216,5 +243,15 @@ mod tests {
         let m = hard_answer_metrics(&[0.1, 0.2], &answers);
         assert_eq!(m.n_hard, 0);
         assert_eq!(m.mrr, 0.0);
+    }
+
+    #[test]
+    fn answer_report_contains_degrees_and_topk() {
+        let (_train, full) = graphs();
+        let q = Query::anchor(3, 0);
+        let report = answer_query_report::<Godel>(&full, &q, &QueryConfig::default(), 2);
+        assert_eq!(report.degrees.len(), full.num_entities());
+        assert_eq!(report.top_k.len(), 2);
+        assert_eq!(report.predicted_cardinality, None);
     }
 }

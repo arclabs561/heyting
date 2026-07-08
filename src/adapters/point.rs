@@ -1,5 +1,5 @@
 //! The tranz point-model adapter.
-use crate::query::AtomicScorer;
+use crate::query::{AtomicScorer, RawProjection, RawScoreOrder};
 
 /// Wraps a `tranz` point-embedding model (`TransE`/`RotatE`/`ComplEx`/
 /// `DistMult`) as an [`AtomicScorer`].
@@ -60,6 +60,27 @@ impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
             .iter()
             .map(|&s| sigmoid(-s / self.temperature))
             .collect()
+    }
+
+    fn project_raw(&self, anchor: usize, relation: usize) -> Option<RawProjection> {
+        Some(RawProjection::new(
+            self.model.score_all_tails(anchor, relation),
+            RawScoreOrder::LowerIsBetter,
+        ))
+    }
+
+    fn project_raw_batch(&self, anchors: &[usize], relation: usize) -> Option<Vec<RawProjection>> {
+        Some(
+            anchors
+                .iter()
+                .map(|&anchor| {
+                    RawProjection::new(
+                        self.model.score_all_tails(anchor, relation),
+                        RawScoreOrder::LowerIsBetter,
+                    )
+                })
+                .collect(),
+        )
     }
 
     fn project_subset(&self, anchor: usize, relation: usize, candidates: &[usize]) -> Vec<f32> {
@@ -129,5 +150,16 @@ mod tests {
             scorer.project_subset(0, 0, &[2, 0, 99]),
             vec![dense[2], dense[0], 0.0]
         );
+    }
+
+    #[test]
+    fn point_model_exposes_lower_is_better_raw_scores() {
+        let ent = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+        let rel = vec![vec![1.0, 1.0]];
+        let scorer = PointModel::new(tranz::DistMult::from_vecs(ent, rel, 2));
+
+        let raw = scorer.project_raw(0, 0).unwrap();
+        assert_eq!(raw.order, RawScoreOrder::LowerIsBetter);
+        assert_eq!(raw.len(), 3);
     }
 }

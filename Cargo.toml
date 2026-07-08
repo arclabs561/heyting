@@ -16,6 +16,10 @@ publish = true
 
 [dependencies]
 tnorms = "0.1.2"
+# Optional: ANN-backed candidate sources.
+hyperball = { version = "0.1.6", optional = true, default-features = false }
+precinct = { version = "0.8.5", optional = true, default-features = false, features = ["index"] }
+vicinity = { version = "0.10.5", optional = true, default-features = false, features = ["hnsw"] }
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
 tranz = { version = "0.7.4", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings, and the
@@ -23,10 +27,16 @@ tranz = { version = "0.7.4", optional = true }
 subsume = { version = "0.17", default-features = false, optional = true }
 
 [features]
+# Enables candidate sources backed by hyperbolic geometry.
+hyperball = ["dep:hyperball"]
+# Enables candidate sources backed by `precinct` region indexes.
+precinct = ["dep:precinct"]
 # Enables `adapters::PointModel`, wrapping a `tranz::Scorer`.
 tranz = ["dep:tranz"]
 # Enables `adapters::BoxModel`, Query2Box scoring via `subsume`.
 subsume = ["dep:subsume"]
+# Enables candidate sources backed by `vicinity` vector indexes.
+vicinity = ["dep:vicinity"]
 
 [[example]]
 name = "fb15k237_clqa"
@@ -43,6 +53,10 @@ required-features = ["tranz"]
 [[example]]
 name = "el_clqa_gated_conformal"
 required-features = ["subsume"]
+
+[[example]]
+name = "retrieval_candidates"
+required-features = ["hyperball", "precinct", "vicinity"]
 
 [dev-dependencies]
 proptest = "1.5"

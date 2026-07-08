@@ -4,7 +4,7 @@
 //!
 //! `heyting` answers complex logical queries over a knowledge graph — multi-hop
 //! questions with AND, OR, NOT, and implication, like "things that are a mammal
-//! and eat fish but are not a cat". It evaluates a query as a computation DAG
+//! and eat fish but are not a cat". It evaluates a query as a computation tree
 //! over atomic one-hop lookups, combining the resulting membership degrees with
 //! fuzzy-logic connectives. The engine is **geometry-generic**: anything that
 //! can answer a one-hop query as `[0, 1]` degrees (point embeddings from
@@ -52,6 +52,7 @@
 
 pub mod abduce;
 pub mod adapters;
+pub mod calibration;
 pub mod conformal;
 pub mod eval;
 pub mod kg;
@@ -62,14 +63,20 @@ pub mod temporal;
 pub mod truth;
 
 pub use abduce::{abduce, AbduceConfig, Hypothesis};
+pub use calibration::{AffineSigmoidCalibrator, CalibratedScorer, Calibrator, SoftmaxCalibrator};
 pub use conformal::{
     answer_set, answer_set_from_scored_pool, calibrate, empirical_coverage, ConformalError,
     ConformalThreshold,
 };
-pub use eval::{crisp_answers, hard_answer_metrics, split_answers, QueryAnswers, QueryMetrics};
+pub use eval::{
+    answer_query_report, crisp_answers, hard_answer_metrics, split_answers, QueryAnswerReport,
+    QueryAnswers, QueryMetrics,
+};
 pub use kg::FuzzyKg;
 pub use provenance::{explain_answer, Witness, WitnessError};
 pub use prune::{answer_query_topk_pruned, CandidateSource};
-pub use query::{answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig};
+pub use query::{
+    answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig, RawProjection, RawScoreOrder,
+};
 pub use temporal::{TemporalKg, TimeSet, TimeWindow};
 pub use truth::{Godel, Lukasiewicz, Product, SelectiveOr, Truth, Viterbi};

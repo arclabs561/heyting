@@ -16,6 +16,7 @@
 //! measures what the t-norm relaxation costs on a given model.
 
 use super::box_model::BoxModel;
+use crate::eval::QueryAnswerReport;
 use crate::query::Query;
 
 /// One axis-aligned query box (center + half-width offsets).
@@ -77,8 +78,21 @@ impl BoxDnf {
     /// volumes; exact when disjuncts are disjoint). The free cardinality
     /// estimate for planning.
     pub fn log_volume_bound(&self) -> f32 {
-        let sum: f32 = self.boxes.iter().map(|b| b.log_volume().exp()).sum();
-        sum.ln()
+        let max_log_volume = self
+            .boxes
+            .iter()
+            .map(QueryBox::log_volume)
+            .fold(f32::NEG_INFINITY, f32::max);
+        if max_log_volume == f32::NEG_INFINITY {
+            return f32::NEG_INFINITY;
+        }
+
+        let scaled_sum: f32 = self
+            .boxes
+            .iter()
+            .map(|b| (b.log_volume() - max_log_volume).exp())
+            .sum();
+        max_log_volume + scaled_sum.ln()
     }
 }
 
@@ -233,6 +247,41 @@ impl BoxModel {
     pub fn materialize(&self, query: &Query) -> Result<BoxDnf, MaterializeError> {
         self.materialize_explained(query).map(|e| e.region)
     }
+
+    /// Materialize `query`, score every entity against the materialized region,
+    /// and return top answers plus the region-volume cardinality estimate.
+    pub fn materialized_answer_report(
+        &self,
+        query: &Query,
+        k: usize,
+    ) -> Result<QueryAnswerReport, MaterializeError> {
+        let region = self.materialize(query)?;
+        let (alpha, temperature) = self.scoring_params();
+        let degrees: Vec<f32> = self
+            .entity_points()
+            .iter()
+            .map(|point| region.degree(point, alpha, temperature))
+            .collect();
+        let mut top_k: Vec<(usize, f32)> = degrees.iter().copied().enumerate().collect();
+        top_k.sort_unstable_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.0.cmp(&b.0))
+        });
+        top_k.truncate(k);
+
+        let log_volume = region.log_volume_bound();
+        let predicted_cardinality = if log_volume.is_finite() {
+            Some(log_volume.exp())
+        } else {
+            Some(0.0)
+        };
+        Ok(QueryAnswerReport {
+            top_k,
+            degrees,
+            predicted_cardinality,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -310,6 +359,35 @@ mod tests {
         assert!(r.degree(&[5.0, 0.0], 0.02, 1.0) > 0.9);
     }
 
+    #[test]
+    fn log_volume_bound_uses_logsumexp() {
+        let b = QueryBox {
+            center: vec![0.0; 200],
+            offset: vec![1.0; 200],
+        };
+        let expected = b.log_volume() + 2.0_f32.ln();
+        let dnf = BoxDnf { boxes: vec![b; 2] };
+        let actual = dnf.log_volume_bound();
+        assert!(actual.is_finite());
+        assert!((actual - expected).abs() < 1e-4, "{actual} vs {expected}");
+    }
+
+    #[test]
+    fn log_volume_bound_handles_empty_and_degenerate_regions() {
+        assert_eq!(
+            (BoxDnf { boxes: vec![] }).log_volume_bound(),
+            f32::NEG_INFINITY
+        );
+
+        let degenerate = BoxDnf {
+            boxes: vec![QueryBox {
+                center: vec![0.0, 0.0],
+                offset: vec![0.0, 1.0],
+            }],
+        };
+        assert_eq!(degenerate.log_volume_bound(), f32::NEG_INFINITY);
+    }
+
     /// On a single-box query the materialized degree IS the atomic
     /// degree: the two execution modes coincide exactly at atoms.
     #[test]
@@ -355,5 +433,17 @@ mod tests {
         assert!(text.contains("and"), "{text}");
         assert!(text.contains("anchor(0, 0)"), "{text}");
         assert!(text.contains("anchor(0, 1)"), "{text}");
+    }
+
+    #[test]
+    fn materialized_answer_report_includes_topk_and_cardinality_bound() {
+        let m = model();
+        let report = m
+            .materialized_answer_report(&Query::anchor(0, 0), 2)
+            .unwrap();
+        assert_eq!(report.degrees.len(), 3);
+        assert_eq!(report.top_k.len(), 2);
+        assert_eq!(report.top_k[0].0, 1);
+        assert!(report.predicted_cardinality.unwrap() > 0.0);
     }
 }

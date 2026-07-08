@@ -1,7 +1,7 @@
 //! Candidate-pruned query evaluation: the retrieval-backend seam.
 //!
 //! [`answer_query_topk`](crate::answer_query_topk) scores every entity at
-//! every DAG node. When an index can propose a small candidate set for each
+//! every query-tree node. When an index can propose a small candidate set for each
 //! atomic hop — a k-NN index over point embeddings, a region index answering
 //! membership — most of that work is provably wasted: entities outside every
 //! hop's candidate set can only carry degree `0`, and `0` is absorbing for
@@ -33,6 +33,15 @@
 //! implication invert degrees, so entities *outside* every candidate set
 //! become answers; a query containing either connective is evaluated densely
 //! by [`answer_query_topk_pruned`] (identical results, no pruning benefit).
+//!
+//! # QTO correspondence
+//!
+//! With [`crate::Viterbi`] (product t-norm, max t-conorm) and a beam at least
+//! as large as each sparse intermediate support, this evaluator is the QTO
+//! sparse forward pass on tree-form EPFO queries: each projection keeps the
+//! best product-weighted derivation and intersections multiply branch degrees.
+//! [`crate::provenance::explain_answer`] supplies the matching backward pass
+//! for witness extraction under the same selective-OR condition.
 //!
 //! [`Truth`]: crate::Truth
 
@@ -75,14 +84,8 @@ pub fn answer_query_topk_pruned<T: Truth>(
         return crate::query::answer_query_topk::<T>(scorer, query, config, k);
     }
     let sparse = eval_sparse::<T>(scorer, source, query, config, None);
-    let mut pairs: Vec<(usize, f32)> = sparse.into_iter().collect();
-    pairs.sort_unstable_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-    pairs.truncate(k);
-    pairs
+    let pairs: Vec<(usize, f32)> = sparse.into_iter().collect();
+    top_k_descending_sparse(&pairs, k)
 }
 
 fn has_inverting_connective(query: &Query) -> bool {
@@ -259,14 +262,23 @@ fn hop(
 
 /// Top-`k` of sparse `(entity, degree)` pairs, best first, ties by entity id.
 fn top_k_descending_sparse(pairs: &[(usize, f32)], k: usize) -> Vec<(usize, f32)> {
+    if k == 0 || pairs.is_empty() {
+        return Vec::new();
+    }
+
     let mut v = pairs.to_vec();
-    v.sort_unstable_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-    v.truncate(k);
+    if k < v.len() {
+        v.select_nth_unstable_by(k, degree_id_desc_order);
+        v.truncate(k);
+    }
+    v.sort_unstable_by(degree_id_desc_order);
     v
+}
+
+fn degree_id_desc_order(a: &(usize, f32), b: &(usize, f32)) -> std::cmp::Ordering {
+    b.1.partial_cmp(&a.1)
+        .unwrap_or(std::cmp::Ordering::Equal)
+        .then(a.0.cmp(&b.0))
 }
 
 #[cfg(test)]

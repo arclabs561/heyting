@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added optional raw projection hooks on `AtomicScorer`
+  (`project_raw`, `project_raw_batch`) plus batched calibrated projections
+  (`project_batch`).
+- Added `CalibratedScorer`, `AffineSigmoidCalibrator`, and
+  `SoftmaxCalibrator` for explicit raw-score calibration.
+- `adapters::PointModel` now exposes `tranz`'s lower-is-better raw tail scores
+  for calibrators.
+- Added optional candidate-source adapters for `vicinity`, `precinct`, and
+  `hyperball`, with a data-free `retrieval_candidates` example.
+- Added `answer_query_report` / `QueryAnswerReport`, returning dense degrees,
+  top-k answers, and optional predicted cardinality in one result.
+- Added `BoxModel::materialized_answer_report` for Box-DNF top-k answers and
+  log-volume cardinality bounds under the `subsume` feature.
+- Added `STABILITY.md` to document the pre-1.0 semver boundary.
+
+### Changed
+
+- Dense and pruned query top-k selection now use partial selection before
+  sorting, avoiding full-sort work for small beams.
+
 ## [0.15.3] - 2026-07-07
 
 ### Changed

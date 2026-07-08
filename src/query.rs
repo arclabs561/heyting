@@ -9,6 +9,61 @@
 
 use crate::truth::Truth;
 
+/// Ordering convention for raw model scores.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RawScoreOrder {
+    /// Larger raw scores mean stronger membership.
+    HigherIsBetter,
+    /// Smaller raw scores mean stronger membership.
+    LowerIsBetter,
+}
+
+/// Uncalibrated one-hop scores for `(anchor, relation, ?)`.
+///
+/// Query evaluation consumes calibrated degrees from
+/// [`AtomicScorer::project`]. This raw form is for calibrators and diagnostics
+/// that need the model's native score scale before it is mapped to `[0, 1]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawProjection {
+    /// Raw score per entity.
+    pub scores: Vec<f32>,
+    /// Whether larger or smaller scores are better in `scores`.
+    pub order: RawScoreOrder,
+}
+
+impl RawProjection {
+    /// Create a raw projection with an explicit score order.
+    pub fn new(scores: Vec<f32>, order: RawScoreOrder) -> Self {
+        Self { scores, order }
+    }
+
+    /// Number of entity scores.
+    pub fn len(&self) -> usize {
+        self.scores.len()
+    }
+
+    /// Whether no scores are present.
+    pub fn is_empty(&self) -> bool {
+        self.scores.is_empty()
+    }
+
+    /// Return a score where larger means stronger membership.
+    pub fn oriented_score(&self, score: f32) -> f32 {
+        match self.order {
+            RawScoreOrder::HigherIsBetter => score,
+            RawScoreOrder::LowerIsBetter => -score,
+        }
+    }
+
+    /// Return all scores oriented so larger means stronger membership.
+    pub fn oriented_scores(&self) -> Vec<f32> {
+        self.scores
+            .iter()
+            .map(|&score| self.oriented_score(score))
+            .collect()
+    }
+}
+
 /// A source of atomic one-hop answers: the only thing the engine needs from a
 /// model.
 ///
@@ -24,6 +79,39 @@ pub trait AtomicScorer {
     /// Membership degrees in `[0, 1]` for all entities as the answer to
     /// `(anchor, relation, ?)`. Higher means more strongly an answer.
     fn project(&self, anchor: usize, relation: usize) -> Vec<f32>;
+
+    /// Membership degrees for many same-relation anchors.
+    ///
+    /// The outer vec follows `anchors`; each inner vec is a dense projection
+    /// for the corresponding anchor. Scorers with native batched projections
+    /// should override this method.
+    fn project_batch(&self, anchors: &[usize], relation: usize) -> Vec<Vec<f32>> {
+        anchors
+            .iter()
+            .map(|&anchor| self.project(anchor, relation))
+            .collect()
+    }
+
+    /// Native uncalibrated scores for `(anchor, relation, ?)`, when available.
+    ///
+    /// The default is `None` because some scorers are already degree-valued or
+    /// have no meaningful raw-score surface. Calibrators use this hook and fall
+    /// back to [`AtomicScorer::project`] when it is unavailable.
+    fn project_raw(&self, _anchor: usize, _relation: usize) -> Option<RawProjection> {
+        None
+    }
+
+    /// Native uncalibrated scores for many same-relation anchors.
+    ///
+    /// The default calls [`AtomicScorer::project_raw`] for each anchor and
+    /// returns `None` if any anchor lacks raw scores.
+    fn project_raw_batch(&self, anchors: &[usize], relation: usize) -> Option<Vec<RawProjection>> {
+        let mut batch = Vec::with_capacity(anchors.len());
+        for &anchor in anchors {
+            batch.push(self.project_raw(anchor, relation)?);
+        }
+        Some(batch)
+    }
 
     /// Membership degrees for `candidates` only, aligned with `candidates`.
     ///
@@ -56,7 +144,18 @@ impl Default for QueryConfig {
     }
 }
 
-/// A complex logical query as a computation DAG over atomic projections.
+impl QueryConfig {
+    /// Expand every positive intermediate in chain projections.
+    ///
+    /// This disables beam truncation by setting [`QueryConfig::beam_k`] to
+    /// `usize::MAX`. It is useful for exact small-graph checks and for the
+    /// sparse Viterbi/QTO path when the candidate supports are already bounded.
+    pub const fn exact() -> Self {
+        Self { beam_k: usize::MAX }
+    }
+}
+
+/// A complex logical query as a computation tree over atomic projections.
 ///
 /// # Scope: the tree-form fragment
 ///
@@ -334,15 +433,16 @@ fn project<T: Truth>(
     config: &QueryConfig,
     n: usize,
 ) -> Vec<f32> {
-    let beam = top_k_descending(inner_scores, config.beam_k);
+    let beam: Vec<_> = top_k_descending(inner_scores, config.beam_k)
+        .into_iter()
+        .filter(|&(_, v_score)| v_score > 0.0)
+        .collect();
+    let anchors: Vec<_> = beam.iter().map(|(v, _)| *v).collect();
+    let projections = scorer.project_batch(&anchors, relation);
     let mut out = vec![0.0_f32; n];
-    for &(v, v_score) in &beam {
-        if v_score <= 0.0 {
-            continue;
-        }
-        let tails = scorer.project(v, relation);
+    for ((_, v_score), tails) in beam.iter().zip(projections.iter()) {
         for (t, &tail) in tails.iter().enumerate().take(n) {
-            let combined = T::and(v_score, tail);
+            let combined = T::and(*v_score, tail);
             if combined > out[t] {
                 out[t] = combined;
             }
@@ -352,10 +452,23 @@ fn project<T: Truth>(
 }
 
 fn top_k_descending(scores: &[f32], k: usize) -> Vec<(usize, f32)> {
+    if k == 0 || scores.is_empty() {
+        return Vec::new();
+    }
+
     let mut idx: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
-    idx.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    idx.truncate(k);
+    if k < idx.len() {
+        idx.select_nth_unstable_by(k, degree_id_desc_order);
+        idx.truncate(k);
+    }
+    idx.sort_unstable_by(degree_id_desc_order);
     idx
+}
+
+fn degree_id_desc_order(a: &(usize, f32), b: &(usize, f32)) -> std::cmp::Ordering {
+    b.1.partial_cmp(&a.1)
+        .unwrap_or(std::cmp::Ordering::Equal)
+        .then(a.0.cmp(&b.0))
 }
 
 #[cfg(test)]
@@ -389,6 +502,11 @@ mod tests {
         assert_eq!(scores.len(), 6);
         assert!((scores[1] - 1.0).abs() < 1e-6, "dog is_a mammal");
         assert!(scores[0].abs() < 1e-6, "not directly animal");
+    }
+
+    #[test]
+    fn exact_config_disables_beam_truncation() {
+        assert_eq!(QueryConfig::exact().beam_k, usize::MAX);
     }
 
     #[test]

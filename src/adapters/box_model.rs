@@ -114,6 +114,16 @@ impl BoxModel {
             .get(relation)
             .map(|(t, o)| (t.as_slice(), o.as_slice()))
     }
+
+    /// Entity points, for geometric materializers that score a composed region.
+    pub(super) fn entity_points(&self) -> &[Vec<f32>] {
+        &self.entity_points
+    }
+
+    /// Distance-to-degree parameters used by geometric materializers.
+    pub(super) fn scoring_params(&self) -> (f32, f32) {
+        (self.alpha, self.temperature)
+    }
 }
 
 impl AtomicScorer for BoxModel {

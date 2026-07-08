@@ -285,9 +285,18 @@ mod tests {
     }
 
     fn check_residuation<T: Truth>(a: f32, b: f32, c: f32) {
+        let ac = T::and(a, c);
+        let imp = T::residuum(a, b);
+
+        // Adjunction: a ⊗ c ≤ b iff c ≤ (a → b).
+        assert_eq!(
+            ac <= b + EPS,
+            c <= imp + EPS,
+            "residuation adjunction failed for a={a}, b={b}, c={c}"
+        );
         // Modus ponens: a ⊗ (a → b) ≤ b.
         assert!(
-            T::and(a, T::residuum(a, b)) <= b + EPS,
+            T::and(a, imp) <= b + EPS,
             "modus ponens failed: {a} ⊗ ({a}→{b}) > {b}"
         );
         // Adjunction unit: c ≤ a → (a ⊗ c).

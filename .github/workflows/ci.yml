@@ -32,7 +32,7 @@ jobs:
       - run: cargo test
       - run: cargo test --all-features
         if: matrix.lint
-      - run: cargo doc --no-deps
+      - run: cargo doc --no-deps --all-features
         if: matrix.lint
         env:
           RUSTDOCFLAGS: -Dwarnings

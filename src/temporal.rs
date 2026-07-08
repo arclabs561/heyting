@@ -9,7 +9,7 @@
 //! relation on the [`TemporalKg`], which returns a **virtual relation id**;
 //! a hop through that id scores only the facts whose validity interval
 //! satisfies the window. Time-scoped queries are then ordinary [`Query`]
-//! DAGs, so intersection planning, candidate pruning
+//! trees, so intersection planning, candidate pruning
 //! ([`CandidateSource`]), conformal
 //! calibration, and the easy/hard evaluation split all apply to temporal
 //! queries with no new machinery.

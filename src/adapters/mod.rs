@@ -16,6 +16,8 @@
 mod box_dnf;
 #[cfg(feature = "subsume")]
 mod box_model;
+#[cfg(any(feature = "hyperball", feature = "precinct", feature = "vicinity"))]
+mod candidates;
 mod faithful_box;
 #[cfg(feature = "tranz")]
 mod point;
@@ -26,6 +28,12 @@ mod temporal_point;
 pub use box_dnf::{BoxDnf, Explanation, MaterializeError, QueryBox};
 #[cfg(feature = "subsume")]
 pub use box_model::{BoxModel, BoxModelError};
+#[cfg(feature = "hyperball")]
+pub use candidates::HyperbolicKnnCandidates;
+#[cfg(feature = "precinct")]
+pub use candidates::PrecinctSubsumers;
+#[cfg(feature = "vicinity")]
+pub use candidates::VicinityCandidates;
 pub use faithful_box::{FaithfulBoxError, FaithfulBoxModel};
 #[cfg(feature = "tranz")]
 pub use point::PointModel;
