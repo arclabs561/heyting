@@ -62,6 +62,19 @@ impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
             .collect()
     }
 
+    fn project_batch(&self, anchors: &[usize], relation: usize) -> Vec<Vec<f32>> {
+        self.model
+            .score_all_tails_batch(anchors, relation)
+            .into_iter()
+            .map(|scores| {
+                scores
+                    .into_iter()
+                    .map(|s| sigmoid(-s / self.temperature))
+                    .collect()
+            })
+            .collect()
+    }
+
     fn project_raw(&self, anchor: usize, relation: usize) -> Option<RawProjection> {
         Some(RawProjection::new(
             self.model.score_all_tails(anchor, relation),
@@ -71,14 +84,10 @@ impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
 
     fn project_raw_batch(&self, anchors: &[usize], relation: usize) -> Option<Vec<RawProjection>> {
         Some(
-            anchors
-                .iter()
-                .map(|&anchor| {
-                    RawProjection::new(
-                        self.model.score_all_tails(anchor, relation),
-                        RawScoreOrder::LowerIsBetter,
-                    )
-                })
+            self.model
+                .score_all_tails_batch(anchors, relation)
+                .into_iter()
+                .map(|scores| RawProjection::new(scores, RawScoreOrder::LowerIsBetter))
                 .collect(),
         )
     }
@@ -149,6 +158,18 @@ mod tests {
         assert_eq!(
             scorer.project_subset(0, 0, &[2, 0, 99]),
             vec![dense[2], dense[0], 0.0]
+        );
+    }
+
+    #[test]
+    fn point_model_batch_projection_matches_dense_projection() {
+        let ent = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+        let rel = vec![vec![1.0, 1.0]];
+        let scorer = PointModel::new(tranz::DistMult::from_vecs(ent, rel, 2));
+
+        assert_eq!(
+            scorer.project_batch(&[0, 1], 0),
+            vec![scorer.project(0, 0), scorer.project(1, 0),]
         );
     }
 

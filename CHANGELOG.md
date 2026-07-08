@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-08
+
 ### Added
 
 - Added optional raw projection hooks on `AtomicScorer`
@@ -23,6 +25,9 @@
 
 - Dense and pruned query top-k selection now use partial selection before
   sorting, avoiding full-sort work for small beams.
+- The optional `tranz` feature now depends on `tranz` 0.8.0 and batches
+  `PointModel` chain projections through `Scorer::score_all_tails_batch`.
+- `tnorms` now resolves to 0.2.0.
 
 ## [0.15.3] - 2026-07-07
 
