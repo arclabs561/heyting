@@ -10,6 +10,7 @@ their data they print fetch/train instructions and exit 0.
 |---|---|
 | See the connectives on a ten-entity toy taxonomy | `taxonomy_query` |
 | See interval-validity temporal hops, no training | `temporal_query` |
+| Calibrate raw one-hop scores before query evaluation | `raw_calibration` |
 | Run the full stack on FB15k-237 with a trained DistMult | `fb15k237_clqa` |
 | Run the temporal stack on ICEWS with a trained TComplEx | `icews14_temporal_clqa` |
 | Score the published BetaE benchmark files, all 14 types | `betae_fb15k237` |
@@ -41,6 +42,19 @@ cargo run --release --example temporal_query
 held office in the 1990s                                -> alice (1.00)
 held office before 1990 AND after 2000 (two terms)      -> bob (1.00)
 held office after 2000 AND member of party_x            -> bob (0.90), carol (0.90)
+```
+
+## `raw_calibration`: raw scores into query degrees
+
+```bash
+cargo run --release --example raw_calibration
+```
+
+```text
+(dog is_a ?) AND (cat is_a ?)
+  #1 mammal   0.881
+  #2 animal   0.119
+  #3 dog      0.000
 ```
 
 ## `fb15k237_clqa`: the CQD recipe end to end
