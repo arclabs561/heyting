@@ -14,6 +14,8 @@ jobs:
         with:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          lookup-only: true
       - run: cargo test
       # The check runs BEFORE auth: a locally-published version must skip the
       # whole publish leg, or crates-io-auth-action fails the run on a repo
