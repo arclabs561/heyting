@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-07
+
+### Added
+
+- `answer_queries` batch API: evaluate many queries in one pass, deduplicating
+  atomic `(anchor, relation)` projections shared across queries. A reusable
+  `AtomicCache` computes each dense leaf once; per-query results are identical
+  to `answer_query`.
+
+### Changed (breaking)
+
+- `abduce::AbduceConfig::max_conjuncts: usize` is replaced by a typed
+  `conjunct_budget: ConjunctBudget` enum (`Atoms` / `Pairs`), so an
+  unsupported budget is a compile error rather than a silent cap. Update any
+  struct literal setting `max_conjuncts` to `conjunct_budget`.
+
 ## [0.16.1] - 2026-08-07
 
 ### Added

@@ -8,6 +8,7 @@
 //! `project`; the engine only ever sees degrees in `[0, 1]`.
 
 use crate::truth::Truth;
+use std::collections::HashMap;
 
 /// Ordering convention for raw model scores.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,40 +343,88 @@ pub fn answer_query<T: Truth>(
     config: &QueryConfig,
 ) -> Vec<f32> {
     let n = scorer.num_entities();
-    eval::<T>(scorer, query, config, n)
+    eval_cached::<T>(scorer, query, config, n, &mut AtomicCache::new())
 }
 
-/// Answer `query` and return the top-`k` `(entity, degree)` pairs, best first.
-pub fn answer_query_topk<T: Truth>(
+/// Answer many queries in the truth algebra `T`, returning a degree vector
+/// (length `scorer.num_entities()`) per query, in input order.
+///
+/// Within a batch, atomic `(anchor, relation)` projections are computed once
+/// and reused across every query that needs them. For a batch that shares
+/// anchors or relations (the common eval-loop shape), this is much cheaper
+/// than calling [`answer_query`] per query; a batch of one is equivalent to
+/// [`answer_query`]. Each query is still evaluated independently and produces
+/// exactly the degrees [`answer_query`] would.
+pub fn answer_queries<T: Truth>(
     scorer: &dyn AtomicScorer,
-    query: &Query,
+    queries: &[Query],
     config: &QueryConfig,
-    k: usize,
-) -> Vec<(usize, f32)> {
-    top_k_descending(&answer_query::<T>(scorer, query, config), k)
+) -> Vec<Vec<f32>> {
+    let n = scorer.num_entities();
+    let mut cache = AtomicCache::new();
+    queries
+        .iter()
+        .map(|q| eval_cached::<T>(scorer, q, config, n, &mut cache))
+        .collect()
 }
 
-fn eval<T: Truth>(
+/// Memo of dense `(anchor, relation)` projections, shared across a batch of
+/// queries. Only atomic leaves are cached; `project_batch` already batches
+/// the per-hop projections, and caching the deterministic dense leaves is
+/// what collapses repeated work across queries sharing an anchor+relation.
+struct AtomicCache {
+    projections: HashMap<(usize, usize), Vec<f32>>,
+}
+
+impl AtomicCache {
+    fn new() -> Self {
+        Self {
+            projections: HashMap::new(),
+        }
+    }
+
+    fn project(
+        &mut self,
+        scorer: &dyn AtomicScorer,
+        anchor: usize,
+        relation: usize,
+        n: usize,
+    ) -> Vec<f32> {
+        use std::collections::hash_map::Entry;
+        match self.projections.entry((anchor, relation)) {
+            // Cache hit: the costly `scorer.project` is skipped; only the
+            // cheap dense memcpy return matters. This is the whole point of
+            // the batch API -- a batch sharing (anchor, relation) computes
+            // that projection once.
+            Entry::Occupied(hit) => hit.get().clone(),
+            Entry::Vacant(slot) => {
+                let mut s = scorer.project(anchor, relation);
+                s.resize(n, 0.0);
+                slot.insert(s).clone()
+            }
+        }
+    }
+}
+
+/// Like [`eval`], but memoizes atomic leaves through `cache`, which is shared
+/// across the queries of one batch.
+fn eval_cached<T: Truth>(
     scorer: &dyn AtomicScorer,
     query: &Query,
     config: &QueryConfig,
     n: usize,
+    cache: &mut AtomicCache,
 ) -> Vec<f32> {
     match query {
-        Query::Anchor { entity, relation } => {
-            let mut s = scorer.project(*entity, *relation);
-            s.resize(n, 0.0);
-            s
-        }
+        Query::Anchor { entity, relation } => cache.project(scorer, *entity, *relation, n),
         Query::Project { inner, relation } => {
-            let inner_scores = eval::<T>(scorer, inner, config, n);
+            let inner_scores = eval_cached::<T>(scorer, inner, config, n, cache);
             project::<T>(scorer, &inner_scores, *relation, config, n)
         }
         Query::Intersection { branches } => {
-            // ⋀ branches via the t-norm, starting from ⊤.
             let mut acc = vec![T::top(); n];
             for branch in branches {
-                let s = eval::<T>(scorer, branch, config, n);
+                let s = eval_cached::<T>(scorer, branch, config, n, cache);
                 for (a, b) in acc.iter_mut().zip(s.iter()) {
                     *a = T::and(*a, *b);
                 }
@@ -383,10 +432,9 @@ fn eval<T: Truth>(
             acc
         }
         Query::Union { branches } => {
-            // ⋁ branches via the t-conorm, starting from ⊥.
             let mut acc = vec![T::bot(); n];
             for branch in branches {
-                let s = eval::<T>(scorer, branch, config, n);
+                let s = eval_cached::<T>(scorer, branch, config, n, cache);
                 for (a, b) in acc.iter_mut().zip(s.iter()) {
                     *a = T::or(*a, *b);
                 }
@@ -394,7 +442,7 @@ fn eval<T: Truth>(
             acc
         }
         Query::Negation { inner } => {
-            let mut s = eval::<T>(scorer, inner, config, n);
+            let mut s = eval_cached::<T>(scorer, inner, config, n, cache);
             for x in &mut s {
                 *x = T::neg(*x);
             }
@@ -404,8 +452,8 @@ fn eval<T: Truth>(
             premise,
             conclusion,
         } => {
-            let p = eval::<T>(scorer, premise, config, n);
-            let c = eval::<T>(scorer, conclusion, config, n);
+            let p = eval_cached::<T>(scorer, premise, config, n, cache);
+            let c = eval_cached::<T>(scorer, conclusion, config, n, cache);
             p.iter()
                 .zip(c.iter())
                 .map(|(&pi, &ci)| T::residuum(pi, ci))
@@ -417,6 +465,16 @@ fn eval<T: Truth>(
             s
         }
     }
+}
+
+/// Answer `query` and return the top-`k` `(entity, degree)` pairs, best first.
+pub fn answer_query_topk<T: Truth>(
+    scorer: &dyn AtomicScorer,
+    query: &Query,
+    config: &QueryConfig,
+    k: usize,
+) -> Vec<(usize, f32)> {
+    top_k_descending(&answer_query::<T>(scorer, query, config), k)
 }
 
 /// Existential projection over a chain hop.
@@ -612,6 +670,81 @@ mod tests {
         assert!(
             (implication_at::<Lukasiewicz>(p, c) - (1.0 - p + c)).abs() < 1e-6,
             "Lukasiewicz: a → b = 1 − a + b"
+        );
+    }
+
+    #[test]
+    fn answer_queries_matches_per_query_answer_query() {
+        let kg = taxonomy();
+        let cfg = QueryConfig::default();
+        let queries = vec![
+            Query::anchor(3, 0),
+            Query::anchor(3, 0).then(0),
+            Query::intersection(vec![Query::anchor(3, 0), Query::anchor(4, 0)]),
+            Query::union(vec![Query::anchor(3, 0), Query::anchor(5, 0)]),
+            Query::anchor(3, 0).negate(),
+            Query::anchor(3, 0).implies(Query::anchor(4, 0)),
+        ];
+        let batched = answer_queries::<Godel>(&kg, &queries, &cfg);
+        assert_eq!(batched.len(), queries.len());
+        for (batch, q) in batched.iter().zip(&queries) {
+            let single = answer_query::<Godel>(&kg, q, &cfg);
+            assert_eq!(batch.len(), single.len());
+            for (b, s) in batch.iter().zip(single.iter()) {
+                assert!((b - s).abs() < 1e-6, "batch {b} != single {s}\nq={q:?}");
+            }
+        }
+    }
+
+    /// The whole point of the batch API: a shared atomic-leaf cache computes
+    /// a reused (anchor, relation) projection once instead of once per query.
+    #[test]
+    fn answer_queries_dedups_atomic_projections() {
+        use std::cell::Cell;
+        struct CountProj<'a> {
+            inner: &'a FuzzyKg,
+            calls: Cell<usize>,
+        }
+        impl AtomicScorer for CountProj<'_> {
+            fn num_entities(&self) -> usize {
+                self.inner.num_entities()
+            }
+            fn project(&self, a: usize, r: usize) -> Vec<f32> {
+                self.calls.set(self.calls.get() + 1);
+                self.inner.project(a, r)
+            }
+        }
+        let kg = taxonomy();
+        let cfg = QueryConfig::default();
+        let queries = vec![
+            Query::anchor(3, 0),
+            Query::anchor(3, 0).then(0),
+            Query::intersection(vec![Query::anchor(3, 0), Query::anchor(4, 0)]),
+        ];
+        // Baseline: evaluate each query with its own fresh cache (no sharing).
+        let mut baseline = 0usize;
+        for q in &queries {
+            let s = CountProj {
+                inner: &kg,
+                calls: Cell::new(0),
+            };
+            let _ = answer_query::<Godel>(&s, q, &cfg);
+            baseline += s.calls.get();
+        }
+        // Batched: one shared cache across all three queries.
+        let scorer = CountProj {
+            inner: &kg,
+            calls: Cell::new(0),
+        };
+        let _ = answer_queries::<Godel>(&scorer, &queries, &cfg);
+        let batched = scorer.calls.get();
+        // The batch must strictly reduce atomic-leaf recomputation: two of the
+        // queries share `anchor(3, 0)`, which is computed once instead of
+        // twice. Other intermediate projections are equal between the two
+        // paths, so the batch total must be lower.
+        assert!(
+            batched < baseline,
+            "batched {batched} should be < per-query baseline {baseline}"
         );
     }
 }

@@ -24,12 +24,9 @@ use crate::truth::Truth;
 pub struct AbduceConfig {
     /// Anchor entities to consider for hypothesis atoms; `None` = all.
     pub anchors: Option<Vec<usize>>,
-    /// Maximum conjuncts per hypothesis (1 = atoms only, 2 = pairs).
-    ///
-    /// The template v1 caps at 2: values above 2 are treated as 2. This is a
-    /// deliberate product bound, not a silent failure — debug builds also
-    /// assert the cap so a caller passing `3` contests it in testing.
-    pub max_conjuncts: usize,
+    /// How many conjuncts a hypothesis may combine: one-hop atoms only, or
+    /// atoms and their pairwise conjunctions.
+    pub conjunct_budget: ConjunctBudget,
     /// Atoms kept for conjunction pairing, and hypotheses returned.
     pub beam: usize,
     /// Evaluation knobs for scoring hypotheses.
@@ -40,11 +37,24 @@ impl Default for AbduceConfig {
     fn default() -> Self {
         Self {
             anchors: None,
-            max_conjuncts: 2,
+            conjunct_budget: ConjunctBudget::Pairs,
             beam: 16,
             query: QueryConfig::default(),
         }
     }
+}
+
+/// How many conjuncts an abduced hypothesis may combine.
+///
+/// The template v1 supports atoms and pairwise conjunctions; deeper templates
+/// are future work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConjunctBudget {
+    /// One-hop atoms only (`Query::Anchor`).
+    Atoms,
+    /// One-hop atoms and pairwise conjunctions of the kept atoms.
+    Pairs,
 }
 
 /// A hypothesis with its explanation quality.
@@ -62,7 +72,7 @@ pub struct Hypothesis {
 ///
 /// Sweeps one-hop atoms `(anchor, relation)` over the configured space,
 /// keeps the top [`AbduceConfig::beam`] by fuzzy Jaccard against the
-/// observation, then (when `max_conjuncts >= 2`) scores pairwise
+/// observation, then (when [`ConjunctBudget::Pairs`]) scores pairwise
 /// conjunctions of kept atoms in the algebra `T`. Returns up to `beam`
 /// hypotheses, best first. Empty `observed` or `relations` returns none.
 pub fn abduce<T: Truth>(
@@ -71,11 +81,6 @@ pub fn abduce<T: Truth>(
     relations: &[usize],
     config: &AbduceConfig,
 ) -> Vec<Hypothesis> {
-    debug_assert!(
-        config.max_conjuncts <= 2,
-        "the template v1 caps at pairwise conjunctions; got max_conjuncts = {}",
-        config.max_conjuncts
-    );
     let n = scorer.num_entities();
     if observed.is_empty() || relations.is_empty() || n == 0 {
         return vec![];
@@ -115,7 +120,7 @@ pub fn abduce<T: Truth>(
         .collect();
 
     // Pairwise conjunctions of kept atoms, combined in the algebra.
-    if config.max_conjuncts >= 2 {
+    if config.conjunct_budget == ConjunctBudget::Pairs {
         for i in 0..atoms.len() {
             for j in (i + 1)..atoms.len() {
                 let degrees: Vec<f32> = atoms[i]

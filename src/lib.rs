@@ -62,7 +62,7 @@ pub mod query;
 pub mod temporal;
 pub mod truth;
 
-pub use abduce::{abduce, AbduceConfig, Hypothesis};
+pub use abduce::{abduce, AbduceConfig, ConjunctBudget, Hypothesis};
 pub use calibration::{AffineSigmoidCalibrator, CalibratedScorer, Calibrator, SoftmaxCalibrator};
 pub use conformal::{
     answer_set, answer_set_from_scored_pool, calibrate, empirical_coverage, ConformalError,
@@ -76,7 +76,8 @@ pub use kg::FuzzyKg;
 pub use provenance::{explain_answer, Witness, WitnessError};
 pub use prune::{answer_query_topk_pruned, CandidateSource};
 pub use query::{
-    answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig, RawProjection, RawScoreOrder,
+    answer_queries, answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig,
+    RawProjection, RawScoreOrder,
 };
 pub use temporal::{TemporalKg, TimeSet, TimeWindow};
 pub use truth::{Godel, Lukasiewicz, Product, SelectiveOr, Truth, Viterbi};
