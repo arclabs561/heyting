@@ -14,6 +14,78 @@ their data they print fetch/train instructions and exit 0.
 | Run the full stack on FB15k-237 with a trained DistMult | `fb15k237_clqa` |
 | Run the temporal stack on ICEWS with a trained TComplEx | `icews14_temporal_clqa` |
 | Score the published BetaE benchmark files, all 14 types | `betae_fb15k237` |
+| Graded EL++ subsumption complex queries over region boxes | `el_clqa` |
+| Conformal answer sets over a faithful EL++ model | `el_clqa_conformal` |
+| Conformal LCA sets over the off-seam gated readout | `el_clqa_gated_conformal` |
+
+## `el_clqa`: graded EL++ subsumption CLQA over region embeddings
+
+Entities are concept boxes (as from a Box2EL-style trainer); the atomic
+relation is graded subsumption `C ⊑ ?`. Composes subsumption degrees through
+the residuated logic. Two queries: common superclasses of `Dog` and `Cat`,
+and dog-only superclasses (subsumption with negation).
+
+```bash
+cargo run --release --features subsume --example el_clqa
+```
+
+```text
+Query A: X such that Dog ⊑ X AND Cat ⊑ X  (common superclasses)
+  Godel:       Animal=1.000  Mammal=0.607  Dog=0.018
+  Product:     Animal=1.000  Mammal=0.368  Dog=0.018
+  Lukasiewicz: Animal=1.000  Mammal=0.213  Dog=0.018
+  -> Mammal graded truth by logic: Godel 0.607 > Product 0.368 > Lukasiewicz 0.213
+All assertions passed: graded EL++ subsumption CLQA over region embeddings.
+```
+
+## `el_clqa_conformal`: conformal sets over a faithful EL++ model
+
+Graded subsumption ranks superclasses but not how many to trust; split
+conformal prediction turns them into coverage-guaranteed answer sets, using
+the always-on `FaithfulBoxModel` adapter (no ecosystem crate). 13 concepts,
+20 subsumption pairs.
+
+```bash
+cargo run --release --example el_clqa_conformal
+```
+
+```text
+13 concepts, 20 subsumption pairs (10 calibration, 10 test)
+Sample true-subsumption degrees for leaf 5: ⊑mid=1.000  ⊑Thing=0.819
+
+alpha     1-alpha      q_hat    empirical
+0.30         0.70      0.632        1.000
+0.20         0.80      0.632        1.000
+0.10         0.90      0.632        1.000
+
+Conformal superclass set for leaf 5 (alpha=0.1): 1=1.00 5=1.00 0=0.82
+(true ancestors: mid 1 and Thing 0)
+All assertions passed: conformal answer sets over a faithful EL++ model.
+```
+
+## `el_clqa_gated_conformal`: conformal LCA sets over a gated readout
+
+The conjunctive least-common-ancestor readout is off the atomic seam, so this
+exercises the scorer-agnostic conformal core on `subsume::clqa::BoxClqa`
+directly.
+
+```bash
+cargo run --release --features subsume --example el_clqa_gated_conformal
+```
+
+```text
+15 concepts, 28 conjunctive leaf-pair queries (14 calibration, 14 test)
+gated readout top-1 LCA accuracy: 28/28
+
+alpha     1-alpha      q_hat    empirical    mean|set|
+0.30         0.70      0.976        1.000         1.14
+0.20         0.80      0.976        1.000         1.14
+0.10         0.90      0.976        1.000         1.14
+
+Conformal LCA set for (leaf 7, leaf 9) at alpha=0.1: 1=0.29
+(true LCA: super 1 )
+All assertions passed: conformal LCA sets over the off-seam gated readout.
+```
 
 ## `taxonomy_query`: the connectives on a toy graph
 
@@ -61,7 +133,7 @@ cargo run --release --example raw_calibration
 
 Trained DistMult (tranz CLI) supplies atom degrees; queries compose in the
 Product and Gödel algebras; hard answers only, filtered; `!` types are
-non-reducible (every atom needs a held-out edge, per the ICLR 2025
+non-reducible (every atom needs a held-out edge, per the ICML 2025
 reducibility critique). Closes with a witness and conformal coverage.
 
 ```bash

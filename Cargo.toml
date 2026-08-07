@@ -58,6 +58,22 @@ required-features = ["subsume"]
 name = "retrieval_candidates"
 required-features = ["hyperball", "precinct", "vicinity"]
 
+[[example]]
+name = "el_clqa"
+required-features = ["subsume"]
+
+[[example]]
+name = "el_clqa_conformal"
+
+[[example]]
+name = "raw_calibration"
+
+[[example]]
+name = "taxonomy_query"
+
+[[example]]
+name = "temporal_query"
+
 [dev-dependencies]
 proptest = "1.5"
 rand = "0.9"
