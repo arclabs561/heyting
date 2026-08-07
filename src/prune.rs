@@ -102,8 +102,13 @@ fn has_inverting_connective(query: &Query) -> bool {
 /// Heuristic upper bound on a query's answer-support size, used to order
 /// intersection branches (most selective first). Anchors report their
 /// candidate-set size and [`Query::Given`] its nonzero count — both cheap and
-/// honest; projections are pessimistically `n` (fan-out unknown without
-/// relation statistics).
+/// honest. A projection's output is drawn from its inner answers, so its
+/// estimate is its inner's — a monotone selectivity signal, not a tight
+/// bound (true fan-out also depends on the relation, which would need
+/// relation-level statistics we do not hold). Ordering is all this powers:
+/// the bound is never used to drop entities, only to choose evaluation order,
+/// and t-norms are commutative, so any estimate here changes work, never
+/// results.
 fn estimate_support(query: &Query, source: &dyn CandidateSource, n: usize) -> usize {
     match query {
         Query::Anchor { entity, relation } => {
@@ -120,7 +125,8 @@ fn estimate_support(query: &Query, source: &dyn CandidateSource, n: usize) -> us
             .map(|b| estimate_support(b, source, n))
             .sum::<usize>()
             .min(n),
-        Query::Project { .. } | Query::Negation { .. } | Query::Implication { .. } => n,
+        Query::Project { inner, .. } => estimate_support(inner, source, n),
+        Query::Negation { .. } | Query::Implication { .. } => n,
     }
 }
 
@@ -209,9 +215,18 @@ fn eval_sparse<T: Truth>(
             }
             acc
         }
-        // Unreachable behind `has_inverting_connective`, but keep it correct:
-        // evaluate densely and keep the nonzero entries.
+        // Unreachable through the public `answer_query_topk_pruned` entry, which
+        // bails on any inverting connective before calling `eval_sparse`. The
+        // arm is kept so a future internal caller cannot silently miss it, but
+        // it does NOT honor `restrict`: a negated/implicated sub-query re-runs
+        // densely and would reintroduce entities the enclosing intersection has
+        // pruned away. Guard that precondition explicitly.
         Query::Negation { .. } | Query::Implication { .. } => {
+            debug_assert!(
+                restrict.is_none(),
+                "inverting connectives are handled by the dense path, never \
+                 with a planner restriction"
+            );
             crate::query::answer_query::<T>(scorer, query, config)
                 .into_iter()
                 .enumerate()
@@ -433,6 +448,45 @@ mod tests {
         assert!(
             scored <= 10,
             "planned intersection should score a handful of entities, scored {scored}"
+        );
+
+        let dense = answer_query_topk::<Godel>(&kg, &q, &cfg, 5);
+        assert_same_topk(&dense, &pruned);
+    }
+
+    /// A chain branch's selectivity propagates through the estimator: a
+    /// 2-hop whose first hop is selective is ordered before a broad anchor,
+    /// so the broad branch is restricted to the chain's survivors instead of
+    /// being scored over the whole corpus. Results stay identical to dense.
+    #[test]
+    fn selective_chain_branch_is_estimated_and_ordered_first() {
+        // Chain: entity 0 -> (rel 0) -> {1, 2} -> (rel 1) -> {10}.
+        // Broad anchor: entity 3 -> (rel 2) -> 50 tails including 10,11.
+        let mut kg = FuzzyKg::new(60);
+        kg.add_edge(0, 0, 1, 0.9);
+        kg.add_edge(0, 0, 2, 0.8);
+        kg.add_edge(1, 1, 10, 0.7);
+        kg.add_edge(2, 1, 10, 0.85);
+        for t in 10..60 {
+            kg.add_edge(3, 2, t, 0.9);
+        }
+        let cfg = QueryConfig::default();
+        // Broad branch FIRST in the written query; the selective chain must
+        // still be evaluated first via its inner-`estimate_support`.
+        let q = Query::intersection(vec![Query::anchor(3, 2), Query::anchor(0, 0).then(1)]);
+
+        let counter = CountingScorer {
+            inner: &kg,
+            scored: std::cell::Cell::new(0),
+        };
+        let pruned = answer_query_topk_pruned::<Godel>(&counter, &kg, &q, &cfg, 5);
+        // Chain branch scores 2 hops * ~2 survivors, broad branch restricted
+        // to the 1-2 chain survivors: a handful, far below the 50-tail broad
+        // corpus.
+        let scored = counter.scored.get();
+        assert!(
+            scored <= 12,
+            "selective chain should be ordered first, scored {scored}"
         );
 
         let dense = answer_query_topk::<Godel>(&kg, &q, &cfg, 5);

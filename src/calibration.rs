@@ -123,6 +123,10 @@ impl AffineSigmoidCalibrator {
 }
 
 impl Calibrator for AffineSigmoidCalibrator {
+    /// The parameterization is relation-agnostic: the same `scale`/`bias` is
+    /// applied to every relation's raw scores. For per-relation calibration,
+    /// wrap this with a [`Calibrator`] that routes on `relation` and holds one
+    /// calibrator per relation, or implement [`Calibrator`] directly.
     fn calibrate(&self, _relation: usize, raw: &RawProjection) -> Vec<f32> {
         raw.scores
             .iter()
@@ -181,6 +185,9 @@ impl SoftmaxCalibrator {
 }
 
 impl Calibrator for SoftmaxCalibrator {
+    /// Relation-agnostic: the row-softmax normalizes within each projection,
+    /// so no `relation`-specific parameter is needed. Per-relation scaling is a
+    /// client wrapper (see [`AffineSigmoidCalibrator::calibrate`] note).
     fn calibrate(&self, _relation: usize, raw: &RawProjection) -> Vec<f32> {
         if raw.is_empty() {
             return Vec::new();

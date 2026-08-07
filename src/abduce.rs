@@ -24,8 +24,11 @@ use crate::truth::Truth;
 pub struct AbduceConfig {
     /// Anchor entities to consider for hypothesis atoms; `None` = all.
     pub anchors: Option<Vec<usize>>,
-    /// Maximum conjuncts per hypothesis (1 = atoms only, 2 = pairs). Values
-    /// above 2 are treated as 2 in this template-based v1.
+    /// Maximum conjuncts per hypothesis (1 = atoms only, 2 = pairs).
+    ///
+    /// The template v1 caps at 2: values above 2 are treated as 2. This is a
+    /// deliberate product bound, not a silent failure — debug builds also
+    /// assert the cap so a caller passing `3` contests it in testing.
     pub max_conjuncts: usize,
     /// Atoms kept for conjunction pairing, and hypotheses returned.
     pub beam: usize,
@@ -68,6 +71,11 @@ pub fn abduce<T: Truth>(
     relations: &[usize],
     config: &AbduceConfig,
 ) -> Vec<Hypothesis> {
+    debug_assert!(
+        config.max_conjuncts <= 2,
+        "the template v1 caps at pairwise conjunctions; got max_conjuncts = {}",
+        config.max_conjuncts
+    );
     let n = scorer.num_entities();
     if observed.is_empty() || relations.is_empty() || n == 0 {
         return vec![];

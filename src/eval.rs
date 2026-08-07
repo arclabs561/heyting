@@ -32,7 +32,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::query::{answer_query, answer_query_topk, AtomicScorer, Query, QueryConfig};
+use crate::query::{answer_query, AtomicScorer, Query, QueryConfig};
 use crate::truth::Godel;
 use crate::Truth;
 
@@ -79,9 +79,13 @@ pub fn answer_query_report<T: Truth>(
     config: &QueryConfig,
     k: usize,
 ) -> QueryAnswerReport {
+    // Evaluate once; derive top-k from the same dense vector so we do not pay
+    // for a second full `answer_query` just to rank it.
+    let degrees = crate::query::answer_query::<T>(scorer, query, config);
+    let top_k = crate::query::top_k_descending(&degrees, k);
     QueryAnswerReport {
-        top_k: answer_query_topk::<T>(scorer, query, config, k),
-        degrees: answer_query::<T>(scorer, query, config),
+        top_k,
+        degrees,
         predicted_cardinality: None,
     }
 }

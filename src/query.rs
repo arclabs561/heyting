@@ -451,7 +451,7 @@ fn project<T: Truth>(
     out
 }
 
-fn top_k_descending(scores: &[f32], k: usize) -> Vec<(usize, f32)> {
+pub(crate) fn top_k_descending(scores: &[f32], k: usize) -> Vec<(usize, f32)> {
     if k == 0 || scores.is_empty() {
         return Vec::new();
     }

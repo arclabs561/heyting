@@ -42,7 +42,9 @@ fragment where this evaluation is exact; cyclic query graphs are out of scope.
   index) proposes per-hop candidates; intersections evaluate most-selective
   branch first with later branches restricted to surviving entities. Results
   are identical to dense evaluation for queries built from hops, AND, and OR;
-  only the work changes.
+  only the work changes. Queries with negation or implication fall back to
+  dense evaluation (no pruning benefit), since those connectives invert
+  degrees and make anything outside the candidate sets a potential answer.
 - **Conformal answer sets** (`conformal`): calibrate on `(query, answer)` pairs
   over any scorer, then return
   answer sets containing the true answer with probability `1 − α` for

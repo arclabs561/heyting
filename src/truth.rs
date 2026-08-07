@@ -93,8 +93,12 @@ pub trait Truth {
     /// premise with its projected scores.
     fn and(a: f32, b: f32) -> f32;
 
-    /// Disjunction `a ⊕ b` (the t-conorm), the algebra's standard dual of `⊗`.
-    /// Used for OR.
+    /// Disjunction `a ⊕ b`, the operation used for OR.
+    ///
+    /// For the residuated-lattice algebras this is the t-conorm dual to `⊗`
+    /// (Gödel, Product, Łukasiewicz). [`Viterbi`] deliberately *overrides* the
+    /// dual with `max` to stay a semiring — see its docstring — so implementors
+    /// must not assume `or` is always the t-conorm dual of [`and`](Self::and).
     fn or(a: f32, b: f32) -> f32;
 
     /// The residuum `a → b = sup { c : a ⊗ c ≤ b }` — the Heyting implication.
@@ -183,10 +187,13 @@ impl Truth for Product {
 /// Viterbi semiring `([0, 1], max, ·, 0, 1)` of best-derivation decoding.
 ///
 /// Chains propagate magnitude like [`Product`], but disjunction picks the
-/// strongest alternative instead of accumulating, which keeps the algebra a
-/// semiring (provenance machinery applies) and makes it witnessable
+/// strongest alternative instead of accumulating — `or` is `max`, **not** the
+/// Product t-conorm `a + b − ab` that would be `⊗`'s dual. That swap keeps the
+/// algebra a semiring (provenance machinery applies) and makes it witnessable
 /// ([`SelectiveOr`]): the answer degree is exactly the best derivation's
-/// product. The residuum is the Goguen residuum (it depends only on `⊗`).
+/// product. It still satisfies the lattice laws and De Morgan, so the `Truth`
+/// proptests hold; only the "dual" relationship to `⊗` does not. The residuum
+/// is the Goguen residuum (it depends only on `⊗`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Viterbi;
 
