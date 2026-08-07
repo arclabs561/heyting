@@ -49,7 +49,7 @@ fragment where this evaluation is exact; cyclic query graphs are out of scope.
   over any scorer, then return
   answer sets containing the true answer with probability `1 − α` for
   exchangeable queries. On FB15k-237 with a trained DistMult (the
-  `fb15k237_clqa` example): 84% held-out coverage at the 80% nominal level.
+  `fb15k237_clqa` example): 80% held-out coverage at the 80% nominal level.
 - **Witnesses** (`provenance`): which facts, through which intermediates,
   made an answer true. For the semiring algebras (`Godel`, `Viterbi`),
   `explain_answer` returns one derivation whose degree equals the engine degree.
