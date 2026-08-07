@@ -26,7 +26,10 @@ fn kg_strategy(n: usize, nrels: usize, edges: usize) -> impl Strategy<Value = Fu
     })
 }
 
-/// Random EPFO query tree (leaves, projections, intersections, unions).
+/// Random query tree (leaves, projections, intersections, unions, and a shard
+/// of negation / implication / Given leaves). Negation and implication force
+/// the pruned path to fall back to dense, so these exercise that the fallback
+/// still agrees with `answer_query`.
 fn query_strategy(n: usize, nrels: usize) -> impl Strategy<Value = Query> {
     let n = n as u32;
     let nrels = nrels as u32;
@@ -62,6 +65,34 @@ fn query_strategy(n: usize, nrels: usize) -> impl Strategy<Value = Query> {
                     relation: r2 as usize,
                 },
                 Query::anchor(a2 as usize, r3 as usize),
+            ])
+        }),
+        // a negated leaf inside an intersection (dense fallback path)
+        (0..n, 0..n, 0..nrels, 0..nrels).prop_map(|(a1, a2, r1, r2)| {
+            Query::intersection(vec![
+                Query::anchor(a1 as usize, r1 as usize),
+                Query::anchor(a2 as usize, r2 as usize).negate(),
+            ])
+        }),
+        // a union containing a negated leaf
+        (0..n, 0..n, 0..nrels, 0..nrels).prop_map(|(a1, a2, r1, r2)| {
+            Query::union(vec![
+                Query::anchor(a1 as usize, r1 as usize),
+                Query::anchor(a2 as usize, r2 as usize).negate(),
+            ])
+        }),
+        // implication
+        (0..n, 0..n, 0..nrels, 0..nrels).prop_map(|(a1, a2, r1, r2)| {
+            Query::anchor(a1 as usize, r1 as usize).implies(Query::anchor(a2 as usize, r2 as usize))
+        }),
+        // a chain intersected with a negation (mix of pruned + dense branches)
+        (0..n, 0..n, 0..nrels, 0..nrels, 0..nrels).prop_map(|(a1, a2, r1, r2, r3)| {
+            Query::intersection(vec![
+                Query::Project {
+                    inner: Box::new(Query::anchor(a1 as usize, r1 as usize)),
+                    relation: r2 as usize,
+                },
+                Query::anchor(a2 as usize, r3 as usize).negate(),
             ])
         }),
     ]
