@@ -12,6 +12,10 @@
   deterministic trials.
 - Data-gated BetaE FB15k-237 gold-table regression (`examples/betae_fb15k237`),
   runnable with `--ignored` in release mode.
+- All previously-unregistered examples (`el_clqa`, `el_clqa_conformal`,
+  `raw_calibration`, `taxonomy_query`, `temporal_query`) are now declared as
+  `[[example]]` targets and runnable; the EL++ proof-of-concept examples are
+  documented in `examples/README.md` with captured output.
 
 ### Changed
 
