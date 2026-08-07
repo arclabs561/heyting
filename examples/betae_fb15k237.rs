@@ -424,28 +424,53 @@ fn type_order() -> &'static [&'static str] {
     ]
 }
 
-/// Macro-averaged Product (P) metrics for every type, in [`type_order`]
-/// order. This is the primary column that is directly comparable across
-/// papers; both the interactive print and the regression test consume it.
+/// Macro-averaged metrics for every type in [`type_order`] order, computed
+/// in one algebra. `godel` selects [`crate::Godel`] (the secondary column);
+/// otherwise [`crate::Product`] (the primary, cross-paper-comparable column).
+/// Negation types have no Gödel reading (their evaluation is a crisp top-k
+/// exclusion mask), so `godel` skips them.
+fn metrics_for(
+    per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
+    model: &PointModel<tranz::DistMult>,
+    cfg: &QueryConfig,
+    godel: bool,
+) -> Vec<(&'static str, Acc)> {
+    type_order()
+        .iter()
+        .filter(|name| !godel || (**name).chars().all(|c| c != 'n'))
+        .filter_map(|name| {
+            let bucket = per_type.get(*name)?;
+            let mut ma = Acc::default();
+            for (q, answers) in bucket {
+                let m = if godel {
+                    hard_answer_metrics(&answer_query::<Godel>(model, q, cfg), answers)
+                } else {
+                    hard_answer_metrics(&answer_query::<Product>(model, q, cfg), answers)
+                };
+                ma.add(m);
+            }
+            Some((*name, ma))
+        })
+        .collect()
+}
+
+/// Product (P) metrics: the primary, directly comparable column.
 fn product_metrics(
     per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
     model: &PointModel<tranz::DistMult>,
     cfg: &QueryConfig,
 ) -> Vec<(&'static str, Acc)> {
-    type_order()
-        .iter()
-        .filter_map(|name| {
-            let bucket = per_type.get(*name)?;
-            let mut ma = Acc::default();
-            for (q, answers) in bucket {
-                ma.add(hard_answer_metrics(
-                    &answer_query::<Product>(model, q, cfg),
-                    answers,
-                ));
-            }
-            Some((*name, ma))
-        })
-        .collect()
+    metrics_for(per_type, model, cfg, false)
+}
+
+/// Gödel (G) metrics for the EPFO types: the secondary, snapshot-sensitive
+/// column (only the 9 non-negation types have a Gödel reading).
+fn godel_metrics(
+    per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
+    model: &PointModel<tranz::DistMult>,
+    cfg: &QueryConfig,
+) -> Vec<(&'static str, Acc)> {
+    metrics_for(per_type, model, cfg, true)
 }
 
 #[derive(Clone, Copy, Default)]
@@ -483,31 +508,34 @@ impl Acc {
 mod regression {
     use super::*;
 
-    /// Gold Product (P) metrics captured from a release run with
+    /// Gold metrics captured from a release run with
     /// `data/FB15k-237-betae` and `data/fb15k237-distmult` (PER_TYPE 300).
-    /// `(mrr, h10)` per type. Tolerances absorb the 0.001 snapshot wobble while
-    /// still catching real protocol or model drift (>0.01).
+    /// Each row is `(name, product_mrr, product_h10, godel_mrr, godel_h10)`.
+    /// The Product columns are primary and cross-paper comparable; the Godel
+    /// columns are the secondary EPFO reading (snapshot-sensitive, so asserted
+    /// with a looser tolerance). Negation types have no Godel reading (crisp
+    /// top-k exclusion mask), so their Godel columns are 0 and skipped.
     ///
     /// Run with: cargo test --features tranz --example betae_fb15k237 -- --ignored
-    const GOLD: &[(&str, f64, f64)] = &[
-        ("1p", 0.329, 0.500),
-        ("2p", 0.025, 0.053),
-        ("3p", 0.040, 0.076),
-        ("2i", 0.167, 0.289),
-        ("3i", 0.180, 0.282),
-        ("pi", 0.120, 0.213),
-        ("ip", 0.126, 0.230),
-        ("2u", 0.071, 0.148),
-        ("up", 0.034, 0.059),
-        ("2in", 0.010, 0.007),
-        ("3in", 0.011, 0.011),
-        ("inp", 0.016, 0.035),
-        ("pin", 0.009, 0.018),
-        ("pni", 0.022, 0.035),
+    const GOLD: &[(&str, f64, f64, f64, f64)] = &[
+        ("1p", 0.329, 0.500, 0.329, 0.500),
+        ("2p", 0.025, 0.053, 0.022, 0.044),
+        ("3p", 0.040, 0.076, 0.036, 0.072),
+        ("2i", 0.167, 0.289, 0.153, 0.270),
+        ("3i", 0.180, 0.282, 0.157, 0.259),
+        ("pi", 0.120, 0.213, 0.102, 0.178),
+        ("ip", 0.126, 0.230, 0.088, 0.193),
+        ("2u", 0.071, 0.148, 0.070, 0.145),
+        ("up", 0.034, 0.059, 0.029, 0.054),
+        ("2in", 0.010, 0.007, 0.0, 0.0),
+        ("3in", 0.011, 0.011, 0.0, 0.0),
+        ("inp", 0.016, 0.035, 0.0, 0.0),
+        ("pin", 0.009, 0.018, 0.0, 0.0),
+        ("pni", 0.022, 0.035, 0.0, 0.0),
     ];
 
-    /// Load the data-gated inputs and return the computed Product table.
-    fn run() -> Option<Vec<(&'static str, Acc)>> {
+    /// Load the data-gated inputs and return (Product, Godel) metric tables.
+    fn run() -> Option<(Vec<(&'static str, Acc)>, Vec<(&'static str, Acc)>)> {
         let id2ent = load_pickle(&format!("{DIR}/id2ent.pkl"))?;
         let id2rel = load_pickle(&format!("{DIR}/id2rel.pkl"))?;
         let queries = load_pickle(&format!("{DIR}/test-queries.plain.pkl"))?;
@@ -601,7 +629,10 @@ mod regression {
             }
         }
         eprintln!("regression: skipped {skipped} unmapped/unrecognized");
-        Some(product_metrics(&per_type, &model, &cfg))
+        Some((
+            product_metrics(&per_type, &model, &cfg),
+            godel_metrics(&per_type, &model, &cfg),
+        ))
     }
 
     /// Data-gated gold regression. SKIPPED by default; run it explicitly in
@@ -616,32 +647,54 @@ mod regression {
     #[test]
     #[ignore]
     fn betae_product_table_matches_gold() {
-        let Some(table) = run() else {
+        let Some((product, godel)) = run() else {
             eprintln!("BetaE gold regression: data or embeddings missing; skipping.");
             return;
         };
         let mut found = 0;
-        for (gold_name, gold_mrr, gold_h10) in GOLD {
-            let Some((_, acc)) = table.iter().find(|(n, _)| n == gold_name) else {
-                panic!("type {gold_name} missing from product table");
-            };
+        for &(gold_name, p_mrr, p_h10, g_mrr, g_h10) in GOLD {
+            let p = product
+                .iter()
+                .find(|(n, _)| *n == gold_name)
+                .unwrap_or_else(|| panic!("type {gold_name} missing from product table"));
             found += 1;
             assert!(
-                (acc.mrr() - gold_mrr).abs() < 0.01,
-                "{gold_name} MRR {:.3} != gold {:.3}",
-                acc.mrr(),
-                gold_mrr
+                (p.1.mrr() - p_mrr).abs() < 0.01,
+                "{gold_name} Product MRR {:.3} != gold {:.3}",
+                p.1.mrr(),
+                p_mrr
             );
             assert!(
-                (acc.h10() - gold_h10).abs() < 0.01,
-                "{gold_name} H@10 {:.3} != gold {:.3}",
-                acc.h10(),
-                gold_h10
+                (p.1.h10() - p_h10).abs() < 0.01,
+                "{gold_name} Product H@10 {:.3} != gold {:.3}",
+                p.1.h10(),
+                p_h10
             );
+            // Negation types have no Godel reading (crisp exclusion mask);
+            // only the 9 EPFO types are asserted, with a looser (0.02)
+            // tolerance for the snapshot-sensitive secondary column.
+            if g_h10 > 0.0 {
+                let g = godel
+                    .iter()
+                    .find(|(n, _)| *n == gold_name)
+                    .unwrap_or_else(|| panic!("type {gold_name} missing from godel table"));
+                assert!(
+                    (g.1.mrr() - g_mrr).abs() < 0.02,
+                    "{gold_name} Godel MRR {:.3} != gold {:.3}",
+                    g.1.mrr(),
+                    g_mrr
+                );
+                assert!(
+                    (g.1.h10() - g_h10).abs() < 0.02,
+                    "{gold_name} Godel H@10 {:.3} != gold {:.3}",
+                    g.1.h10(),
+                    g_h10
+                );
+            }
         }
         assert_eq!(found, GOLD.len(), "not all gold types checked");
         eprintln!(
-            "BetaE gold regression passed: {} types within tolerance on MRR and H@10.",
+            "BetaE gold regression passed: {} types within tolerance on Product and Godel.",
             found
         );
     }
