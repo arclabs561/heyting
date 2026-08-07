@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### Added
+
+- Randomized differential tests (`tests/prune_proptest.rs`) asserting pruned
+  evaluation matches dense on random EPFO query trees, including negation and
+  implication fallback, across all four algebras.
+- Finite-sample conformal coverage check (`tests/conformal_coverage.rs`)
+  verifying held-out coverage meets its nominal level over thousands of
+  deterministic trials.
+- Data-gated BetaE FB15k-237 gold-table regression (`examples/betae_fb15k237`),
+  runnable with `--ignored` in release mode.
+
+### Changed
+
+- `prune`: the intersection planner now propagates a projection branch's
+  support estimate through `estimate_support`, so selective chains are ordered
+  first (results unchanged; only scoring work).
+- `eval::answer_query_report` evaluates the query once and derives top-k from
+  the same dense vector instead of re-running `answer_query`.
+- `eval::hard_answer_metrics` treats NaN degrees as bottom so they cannot
+  silently inflate MRR.
+- `BoxModel::materialized_answer_report` clamps the predicted cardinality to
+  the largest finite `f32` instead of overflowing to `+inf` for
+  high-dimensional boxes.
+- `truth`: documented that `Viterbi::or` is deliberately `max`, not the
+  t-conorm dual of `and`, and that this is what keeps it a semiring.
+- `abduce`: `max_conjuncts` above 2 is now asserted (debug) rather than silently
+  capped.
+
+### Fixed
+
+- README now reports the actual `fb15k237_clqa` conformal coverage (80%) instead
+  of a stale 84%.
+- Reducibility citation corrected to Gregucci et al. (ICML 2025, arXiv:2410.12537);
+  `TimeWindow::Between` vs `TimeSet::between_all` endpoint semantics documented.
+
 ## [0.16.0] - 2026-07-08
 
 ### Added
