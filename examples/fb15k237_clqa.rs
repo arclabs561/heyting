@@ -16,7 +16,7 @@
 //! arXiv:2410.12537 shows collapses to plain link prediction) and
 //! NON-REDUCIBLE (every atom needs a held-out edge). The gap between the two
 //! columns is the honest measure of multi-hop composition; compare against
-//! CQD (arXiv:2011.03459), QTO (ICML 2023), and the ICLR 2025 critique's
+//! CQD (arXiv:2011.03459), QTO (ICML 2023), and the ICML 2025 critique's
 //! tables as sanity anchors, not leaderboard entries (query files differ).
 //!
 //! Data-gated: needs `data/Release/{train,valid,test}.txt` (FB15k-237) and
@@ -247,7 +247,7 @@ fn main() {
     println!(
         "\n! types are non-reducible (every atom needs a held-out edge; no\n\
          single-link shortcut). The drop from plain to ! types reproduces the\n\
-         ICLR 2025 finding (arXiv:2410.12537) that reducible benchmark queries\n\
+         ICML 2025 finding (arXiv:2410.12537) that reducible benchmark queries\n\
          overstate multi-hop composition. Compare plain types against CQD\n\
          (arXiv:2011.03459) / QTO (ICML 2023); protocol matches, files differ."
     );

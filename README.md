@@ -132,6 +132,8 @@ model and the same connectives answer complex queries over it.
   predictors. ICLR 2021. arXiv:2011.03459.
 - Yin, Wang, Song. Rethinking complex queries on knowledge graphs with neural
   link predictors. ICLR 2024. arXiv:2304.07063.
+- Gregucci, Xiong, Hernandez, Loconte, Minervini, Staab, Vergari. Is complex
+  query answering really complex? ICML 2025. arXiv:2410.12537.
 - Vovk, Gammerman, Shafer. *Algorithmic Learning in a Random World*. Springer,
   2005.
 - Angelopoulos, Bates. A gentle introduction to conformal prediction and

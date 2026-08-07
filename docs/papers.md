@@ -103,6 +103,22 @@ heyting takes: honest scope. `Query` is a tree ADT, which is exactly the
 tree-form fragment; cyclic evaluation is declared out of scope rather than
 approximated silently.
 
+### Is complex query answering really complex? (Gregucci, Xiong, Hernandez, Loconte, Minervini, Staab, Vergari, ICML 2025)
+
+Audits how the standard CQA benchmarks are constructed and finds that most
+queries (up to 98% for some types) reduce to simpler problems such as plain
+link prediction: a query counts as "reducible" when only one atom needs a
+held-out edge, so a 1p scorer can answer it by finding that one link. State
+of the art CQA models drop sharply when evaluated on non-reducible queries
+that truly need multi-hop composition, and the paper proposes harder
+benchmarks reflecting real-world KG structure.
+
+heyting takes: the reducible / non-reducible query split as an evaluation
+discipline. The `fb15k237_clqa` and `icews14_temporal_clqa` examples generate
+each composite type in both classes (the `!` suffixes mark non-reducible) and
+report the columns separately, so the reducibility inflation is measured
+rather than hidden.
+
 ### Algorithmic Learning in a Random World (Vovk, Gammerman, Shafer, 2005)
 
 The conformal prediction book. If calibration and test data are
