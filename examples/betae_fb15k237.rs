@@ -138,10 +138,6 @@ fn main() {
         return;
     };
 
-    // Fixed presentation order; names follow the BetaE paper.
-    let order = [
-        "1p", "2p", "3p", "2i", "3i", "pi", "ip", "2u", "up", "2in", "3in", "inp", "pin", "pni",
-    ];
     // Negation branches evaluate CQD-style: product ⊗ everywhere, with the
     // standard negation 1 − x injected as a Given leaf (the terminal 'n'
     // marker builds the un-negated branch, scores it, and complements).
@@ -236,25 +232,31 @@ fn main() {
         "{:<5} {:>4}  {:>9} {:>6} {:>6} {:>6}   {:>8} {:>6}",
         "type", "n", "MRR", "H@1", "H@3", "H@10", "MRR(G)", "H@10"
     );
-    for name in order {
-        let Some(bucket) = per_type.get(name) else {
-            continue;
-        };
-        let negation = name.contains('n') && name != "1p"; // 2in/3in/inp/pin/pni
-        let (mut ma, mut mg) = (Acc::default(), Acc::default());
-        for (q, answers) in bucket {
-            ma.add(hard_answer_metrics(
-                &answer_query::<Product>(&model, q, &cfg),
-                answers,
-            ));
-            if !negation {
+    let table = product_metrics(&per_type, &model, &cfg);
+    let godel_by_type: HashMap<&str, Acc> = {
+        let mut m = HashMap::new();
+        for &name in type_order() {
+            let Some(bucket) = per_type.get(name) else {
+                continue;
+            };
+            if name.contains('n') && name != "1p" {
+                continue;
+            }
+            let mut mg = Acc::default();
+            for (q, answers) in bucket {
                 mg.add(hard_answer_metrics(
                     &answer_query::<Godel>(&model, q, &cfg),
                     answers,
                 ));
             }
+            m.insert(name, mg);
         }
-        let tag = if negation { "(P¬)" } else { " (P)" };
+        m
+    };
+    for (name, ma) in &table {
+        let negation = name.contains('n') && *name != "1p";
+        let tag = if negation { "(P\u{00ac})" } else { " (P)" };
+        let mg = godel_by_type.get(name).copied().unwrap_or_default();
         println!(
             "{:<5} {:>4}  {:>6.3}{tag} {:>6.3} {:>6.3} {:>6.3}   {:>8.3} {:>6.3}",
             name,
@@ -415,7 +417,38 @@ fn load_pickle(path: &str) -> Option<Value> {
     serde_pickle::value_from_reader(std::io::BufReader::new(f), Default::default()).ok()
 }
 
-#[derive(Default)]
+/// Per-type ordering of the printed table (fixed, follows the BetaE paper).
+fn type_order() -> &'static [&'static str] {
+    &[
+        "1p", "2p", "3p", "2i", "3i", "pi", "ip", "2u", "up", "2in", "3in", "inp", "pin", "pni",
+    ]
+}
+
+/// Macro-averaged Product (P) metrics for every type, in [`type_order`]
+/// order. This is the primary column that is directly comparable across
+/// papers; both the interactive print and the regression test consume it.
+fn product_metrics(
+    per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
+    model: &PointModel<tranz::DistMult>,
+    cfg: &QueryConfig,
+) -> Vec<(&'static str, Acc)> {
+    type_order()
+        .iter()
+        .filter_map(|name| {
+            let bucket = per_type.get(*name)?;
+            let mut ma = Acc::default();
+            for (q, answers) in bucket {
+                ma.add(hard_answer_metrics(
+                    &answer_query::<Product>(model, q, cfg),
+                    answers,
+                ));
+            }
+            Some((*name, ma))
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Default)]
 struct Acc {
     n: usize,
     mrr: f64,
@@ -443,5 +476,173 @@ impl Acc {
     }
     fn h10(&self) -> f64 {
         self.h10 / self.n.max(1) as f64
+    }
+}
+
+#[cfg(test)]
+mod regression {
+    use super::*;
+
+    /// Gold Product (P) metrics captured from a release run with
+    /// `data/FB15k-237-betae` and `data/fb15k237-distmult` (PER_TYPE 300).
+    /// `(mrr, h10)` per type. Tolerances absorb the 0.001 snapshot wobble while
+    /// still catching real protocol or model drift (>0.01).
+    ///
+    /// Run with: cargo test --features tranz --example betae_fb15k237 -- --ignored
+    const GOLD: &[(&str, f64, f64)] = &[
+        ("1p", 0.329, 0.500),
+        ("2p", 0.025, 0.053),
+        ("3p", 0.040, 0.076),
+        ("2i", 0.167, 0.289),
+        ("3i", 0.180, 0.282),
+        ("pi", 0.120, 0.213),
+        ("ip", 0.126, 0.230),
+        ("2u", 0.071, 0.148),
+        ("up", 0.034, 0.059),
+        ("2in", 0.010, 0.007),
+        ("3in", 0.011, 0.011),
+        ("inp", 0.016, 0.035),
+        ("pin", 0.009, 0.018),
+        ("pni", 0.022, 0.035),
+    ];
+
+    /// Load the data-gated inputs and return the computed Product table.
+    fn run() -> Option<Vec<(&'static str, Acc)>> {
+        let id2ent = load_pickle(&format!("{DIR}/id2ent.pkl"))?;
+        let id2rel = load_pickle(&format!("{DIR}/id2rel.pkl"))?;
+        let queries = load_pickle(&format!("{DIR}/test-queries.plain.pkl"))?;
+        let easy = load_pickle(&format!("{DIR}/test-easy-answers.plain.pkl"))?;
+        let hard = load_pickle(&format!("{DIR}/test-hard-answers.plain.pkl"))?;
+
+        let (ent_names, ent_vecs) =
+            tranz::io::import_embeddings(&Path::new(EMB).join("entities.tsv")).ok()?;
+        let (rel_names, rel_vecs) =
+            tranz::io::import_embeddings(&Path::new(EMB).join("relations.tsv")).ok()?;
+        let ent_row: HashMap<&str, usize> = ent_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.as_str(), i))
+            .collect();
+        let rel_row: HashMap<&str, usize> = rel_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.as_str(), i))
+            .collect();
+        let map_vocab = |v: &Value, f: &dyn Fn(&str) -> Option<usize>| -> HashMap<i64, usize> {
+            let Value::Dict(d) = v else {
+                return HashMap::new();
+            };
+            d.iter()
+                .filter_map(|(k, name)| {
+                    let (HashableValue::I64(id), Value::String(name)) = (k, name) else {
+                        return None;
+                    };
+                    Some((*id, f(name)?))
+                })
+                .collect()
+        };
+        let ents = map_vocab(&id2ent, &|n| ent_row.get(n).copied());
+        let rels = map_vocab(&id2rel, &|n| match n.split_at(1) {
+            ("+", base) => rel_row.get(base).copied(),
+            ("-", base) => rel_row
+                .get(format!("{base}_inv").as_str())
+                .or_else(|| rel_row.get(base))
+                .copied(),
+            _ => rel_row.get(n).copied(),
+        });
+        let dim = ent_vecs.first().map(Vec::len).filter(|w| *w > 0)?;
+        let model =
+            PointModel::with_temperature(tranz::DistMult::from_vecs(ent_vecs, rel_vecs, dim), 5.0);
+        let cfg = QueryConfig { beam_k: 32 };
+        let Value::Dict(queries) = queries else {
+            return None;
+        };
+        let (Value::Dict(easy), Value::Dict(hard)) = (easy, hard) else {
+            return None;
+        };
+
+        let std_neg = |sub: Query| -> Option<Query> {
+            let d = answer_query::<Product>(&model, &sub, &cfg);
+            let mut sorted: Vec<f32> = d.clone();
+            sorted.sort_by(|a, b| b.partial_cmp(a).unwrap());
+            let theta = sorted.get(NEG_TOP_K).copied().unwrap_or(f32::MAX);
+            Some(Query::given(
+                d.iter()
+                    .map(|&x| if x > theta { 0.0 } else { 1.0 })
+                    .collect(),
+            ))
+        };
+
+        let mut per_type: HashMap<String, Vec<(Query, QueryAnswers)>> = HashMap::new();
+        let mut skipped = 0usize;
+        for (structure, qset) in &queries {
+            let Some(name) = structure_name(structure) else {
+                skipped += 1;
+                continue;
+            };
+            let Value::Set(qset) = qset else { continue };
+            let bucket = per_type.entry(name.to_string()).or_default();
+            for q in qset {
+                if bucket.len() >= PER_TYPE {
+                    break;
+                }
+                let Some(query) = build_query(q, structure, &ents, &rels, &std_neg) else {
+                    continue;
+                };
+                let key = q.clone();
+                let answers = QueryAnswers {
+                    easy: answer_set(&easy, &key, &ents),
+                    hard: answer_set(&hard, &key, &ents),
+                };
+                if answers.hard.is_empty() {
+                    continue;
+                }
+                bucket.push((query, answers));
+            }
+        }
+        eprintln!("regression: skipped {skipped} unmapped/unrecognized");
+        Some(product_metrics(&per_type, &model, &cfg))
+    }
+
+    /// Data-gated gold regression. SKIPPED by default; run it explicitly in
+    /// RELEASE mode (a debug build re-scoring 14x300 queries over 14.5k
+    /// entities is impractically slow):
+    ///
+    /// ```text
+    /// cargo test --release --features tranz --example betae_fb15k237 -- --ignored
+    /// ```
+    ///
+    /// Needs the ~1.4 GB BetaE files + trained DistMult in data/.
+    #[test]
+    #[ignore]
+    fn betae_product_table_matches_gold() {
+        let Some(table) = run() else {
+            eprintln!("BetaE gold regression: data or embeddings missing; skipping.");
+            return;
+        };
+        let mut found = 0;
+        for (gold_name, gold_mrr, gold_h10) in GOLD {
+            let Some((_, acc)) = table.iter().find(|(n, _)| n == gold_name) else {
+                panic!("type {gold_name} missing from product table");
+            };
+            found += 1;
+            assert!(
+                (acc.mrr() - gold_mrr).abs() < 0.01,
+                "{gold_name} MRR {:.3} != gold {:.3}",
+                acc.mrr(),
+                gold_mrr
+            );
+            assert!(
+                (acc.h10() - gold_h10).abs() < 0.01,
+                "{gold_name} H@10 {:.3} != gold {:.3}",
+                acc.h10(),
+                gold_h10
+            );
+        }
+        assert_eq!(found, GOLD.len(), "not all gold types checked");
+        eprintln!(
+            "BetaE gold regression passed: {} types within tolerance on MRR and H@10.",
+            found
+        );
     }
 }
