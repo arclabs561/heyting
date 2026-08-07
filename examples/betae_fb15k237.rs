@@ -464,7 +464,9 @@ fn product_metrics(
 }
 
 /// Gödel (G) metrics for the EPFO types: the secondary, snapshot-sensitive
-/// column (only the 9 non-negation types have a Gödel reading).
+/// column (only the 9 non-negation types have a Gödel reading). Consumed
+/// only by the `#[ignore]`d gold regression test, so it is test-only.
+#[cfg(test)]
 fn godel_metrics(
     per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
     model: &PointModel<tranz::DistMult>,
