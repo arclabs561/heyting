@@ -60,6 +60,7 @@ required-features = ["hyperball", "precinct", "vicinity"]
 
 [dev-dependencies]
 proptest = "1.5"
+rand = "0.9"
 serde-pickle = "1.2"
 
 [lints.rust]
