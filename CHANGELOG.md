@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-08-07
+
 ### Added
 
 - Randomized differential tests (`tests/prune_proptest.rs`) asserting pruned
