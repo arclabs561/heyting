@@ -145,13 +145,21 @@ pub fn hard_answer_metrics(scores: &[f32], answers: &QueryAnswers) -> QueryMetri
         // An entity past the end of `scores` has degree 0.0 by the engine's
         // own convention (`answer_query` pads with 0.0), not as an error
         // sentinel; the ranking below treats it as a bottom-scored answer.
+        // A NaN degree is coerced to bottom too, so it cannot silently slip
+        // the `s >= target_score` comparison and inflate the rank.
         let target_score = scores.get(target).copied().unwrap_or(0.0);
+        let target_score = if target_score.is_finite() {
+            target_score
+        } else {
+            0.0
+        };
         let mut rank = 1usize;
         for (e, &s) in scores.iter().enumerate() {
             if e == target || answers.easy.contains(&e) || answers.hard.contains(&e) {
                 continue;
             }
-            if s >= target_score {
+            // NaN competitors are bottom too: they never beat the target.
+            if s.is_finite() && s >= target_score {
                 rank += 1;
             }
         }

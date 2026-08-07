@@ -271,10 +271,20 @@ impl BoxModel {
         top_k.truncate(k);
 
         let log_volume = region.log_volume_bound();
-        let predicted_cardinality = if log_volume.is_finite() {
-            Some(log_volume.exp())
-        } else {
-            Some(0.0)
+        let predicted_cardinality = match log_volume {
+            // `exp` saturates to +inf for modest log-volumes (e.g. a
+            // high-dim box), which would surface as a surprising `Some(inf)`
+            // cardinality. Bound it to the largest finite `f32` so the
+            // estimate reads as "at least this large" rather than inf.
+            lv if lv >= f32::MAX.ln() => Some(f32::MAX),
+            lv => {
+                let v = lv.exp();
+                if v.is_finite() {
+                    Some(v)
+                } else {
+                    Some(f32::MAX)
+                }
+            }
         };
         Ok(QueryAnswerReport {
             top_k,
@@ -445,5 +455,40 @@ mod tests {
         assert_eq!(report.top_k.len(), 2);
         assert_eq!(report.top_k[0].0, 1);
         assert!(report.predicted_cardinality.unwrap() > 0.0);
+    }
+
+    /// A huge log-volume (high-dimensional, wide box) must not overflow the
+    /// cardinality estimate to `+inf`; the report should cap it at the
+    /// largest finite `f32`.
+    #[test]
+    fn cardinality_estimate_is_bounded_rather_than_infinite() {
+        // A 200-dim box with half-width ~2 gives log-volume ~ 200*ln(4) ~ 277,
+        // far past f32 exp's overflow point (~88).
+        let b = QueryBox {
+            center: vec![0.0; 200],
+            offset: vec![2.0; 200],
+        };
+        let lv = b.log_volume();
+        assert!(
+            lv > f32::MAX.ln(),
+            "test premise: log-volume {lv} overflows"
+        );
+        // Materialize an anchor whose box is that wide, then check the report.
+        let m = BoxModel::new(
+            vec![vec![0.0; 200], vec![0.0; 200]],
+            vec![(vec![0.0; 200], vec![2.0; 200])],
+            BoxModel::DEFAULT_ALPHA,
+            1.0,
+        )
+        .unwrap();
+        let report = m
+            .materialized_answer_report(&Query::anchor(0, 0), 2)
+            .unwrap();
+        let card = report.predicted_cardinality.unwrap();
+        assert!(card.is_finite(), "cardinality must stay finite, got {card}");
+        assert!(
+            card >= f32::MAX / 2.0,
+            "expected a large saturated bound, got {card}"
+        );
     }
 }

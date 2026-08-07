@@ -224,7 +224,16 @@ impl TimeSet {
 
     /// TFLEX's Between operator: the timestamps after every member of `a`
     /// and before every member of `b`,
-    /// `Between(a, b) = After(a) ∩ Before(b)`.
+    /// `Between(a, b) = After(a) ∩ Before(b)` — **strict**: timestamps greater
+    /// than every member of `a` and less than every member of `b`.
+    ///
+    /// Contrast with [`TimeWindow::Between`], the *continuous*-window "overlap"
+    /// form, which is **inclusive** at both endpoints (`start <= b && end >= a`).
+    /// The two share a name but differ in endpoint semantics: the discrete
+    /// `TimeSet` operators follow TFLEX's strict `After`/`Before` (`> max`,
+    /// `< min`); the interval window uses closed-interval overlap. This is
+    /// intentional (each matches its source model), but callers mixing the two
+    /// should keep it in mind.
     ///
     /// # Panics
     /// Panics if the axes differ.
@@ -561,6 +570,27 @@ mod tests {
         assert!(TimeWindow::Between(2000.0, 2006.0).admits(2005.0, 2009.0));
         assert!(TimeWindow::Between(2000.0, 2006.0).admits(1993.0, 2001.0));
         assert!(!TimeWindow::Between(2010.0, 2012.0).admits(2005.0, 2009.0));
+    }
+
+    /// `TimeWindow::Between` is inclusive (closed-interval overlap), which is
+    /// distinct from the strict `TimeSet::between_all` operator; pin the
+    /// endpoint behavior so the two "between"s cannot silently diverge.
+    #[test]
+    fn window_between_is_inclusive_and_timeset_between_all_is_strict() {
+        // A fact exactly touching the window's lower bound is admitted.
+        assert!(TimeWindow::Between(2000.0, 2006.0).admits(2000.0, 2001.0));
+        // A fact exactly touching the window's upper bound is admitted.
+        assert!(TimeWindow::Between(2000.0, 2006.0).admits(2005.0, 2006.0));
+        // The discrete operator is strict: nothing is after its own max nor
+        // before its own min, so a single timestamp has an empty between.
+        let n = 10;
+        let s = TimeSet::between(3, 3, n);
+        assert!(TimeSet::between_all(&s, &s).is_empty());
+        // Two distinct timestamps: between(3, 3, 5) = {4}.
+        let a = TimeSet::between(3, 3, n); // {3}
+        let b = TimeSet::between(5, 5, n); // {5}
+        let mid = TimeSet::between_all(&a, &b);
+        assert_eq!(mid.iter().collect::<Vec<_>>(), vec![4]);
     }
 
     /// Hand-oracle: "held the office before 1990" admits only bob's first

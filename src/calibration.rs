@@ -194,6 +194,10 @@ impl Calibrator for SoftmaxCalibrator {
         }
 
         let oriented = raw.oriented_scores();
+        // All-NaN (or all-non-finite) scores degenerate to an all-zero row.
+        // This is intentional and safe: a fully-broken projection scores every
+        // entity equally (nothing distinguishes), rather than poisoning the
+        // reduce below.
         let Some(max) = oriented
             .iter()
             .copied()
@@ -289,5 +293,18 @@ mod tests {
         assert!((sum - 1.0).abs() < 1e-6);
         assert!(degrees[0] > degrees[1]);
         assert!(degrees[1] > degrees[2]);
+    }
+
+    /// All-NaN raw scores degenerate to an all-zero degree row: every entity
+    /// is scored equally (nothing is distinguishable) rather than poisoning
+    /// the softmax reduce. Safe, and pinned so it cannot regress to `inf`.
+    #[test]
+    fn softmax_all_nan_yields_zero_row() {
+        let raw = RawProjection::new(
+            vec![f32::NAN, f32::NAN, f32::NAN],
+            RawScoreOrder::HigherIsBetter,
+        );
+        let degrees = SoftmaxCalibrator::probability_row().calibrate(0, &raw);
+        assert!(degrees.iter().all(|&d| d == 0.0));
     }
 }
