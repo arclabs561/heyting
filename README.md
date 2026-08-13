@@ -11,7 +11,7 @@ point-embedding model, a region model, or a plain in-memory graph.
 
 ```toml
 [dependencies]
-heyting = "0.16.0"
+heyting = "0.17.0"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
@@ -48,8 +48,9 @@ fragment where this evaluation is exact; cyclic query graphs are out of scope.
 - **Conformal answer sets** (`conformal`): calibrate on `(query, answer)` pairs
   over any scorer, then return
   answer sets containing the true answer with probability `1 − α` for
-  exchangeable queries. On FB15k-237 with a trained DistMult (the
-  `fb15k237_clqa` example): 80% held-out coverage at the 80% nominal level.
+  exchangeable queries. One run of the `fb15k237_clqa` example on FB15k-237
+  with a trained DistMult measured 80% held-out coverage at the 80% nominal
+  level.
 - **Witnesses** (`provenance`): which facts, through which intermediates,
   made an answer true. For the semiring algebras (`Godel`, `Viterbi`),
   `explain_answer` returns one derivation whose degree equals the engine degree.
