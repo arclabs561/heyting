@@ -2,8 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Compare answer-set membership on the calibration score scale. This retains
+  boundary ties that rounding a `1 - qhat` degree cutoff could exclude.
+
 ### Changed (breaking)
 
+- Delegate scalar conformal calibration to `statskit`, preserving Heyting's
+  public threshold and error types. Rank arithmetic is now exact for the
+  supplied binary miscoverage value.
 - `conformal::calibrate_scores` now preserves arbitrary finite raw-score
   thresholds and rejects NaN or infinite scores with
   `ConformalError::NonFiniteScore`. It no longer silently clamps scores to

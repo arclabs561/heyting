@@ -1,12 +1,12 @@
-//! Conformal answer sets: coverage-guaranteed query answering.
+//! Split-conformal answer sets for query answering.
 //!
 //! A fuzzy degree ranks answers but does not say *how many* of the top
 //! entities to trust. Split conformal prediction converts any scorer's
 //! degrees into an answer **set** with a finite-sample guarantee: calibrate
 //! on `n` held-out `(query, true answer)` pairs, and the set for a fresh
 //! exchangeable query contains its true answer with probability at least
-//! `1 - alpha` — no assumptions on the scorer, the geometry, or the training
-//! procedure. This is the conformalized-answer-set construction for
+//! `1 - alpha`. Keep the scorer fixed independently of calibration.
+//! This is the conformalized-answer-set construction for
 //! knowledge-graph embeddings of Zhu et al. (NAACL 2025), applied to
 //! [`answer_query`] degrees, so it wraps every [`AtomicScorer`] and every
 //! [`Truth`] algebra uniformly.
@@ -14,10 +14,9 @@
 //! Mechanics: the nonconformity of a true answer is `1 - degree`; [`calibrate`]
 //! takes the `ceil((n + 1) * (1 - alpha))`-th smallest calibration
 //! nonconformity as the threshold `q̂`; [`answer_set`] then returns every
-//! entity with `degree >= 1 - q̂`. When the rank exceeds `n` (too few
+//! entity with `1 - degree <= q̂`. When the rank exceeds `n` (too few
 //! calibration examples for the requested confidence), the threshold is
-//! conservative and the set is all entities — a correct, honest answer, not
-//! an error.
+//! conservative and the set is all entities.
 //!
 //! Keep the scorer and score definition fixed independently of calibration
 //! examples. Calibration and future scores must be exchangeable.
@@ -28,16 +27,17 @@
 //! refinement: call [`calibrate`] once per relation with that relation's
 //! examples.
 //!
-//! Off-seam readouts: [`calibrate_scores`] and [`answer_set_from_degrees`] are
-//! the scorer-agnostic core, taking raw nonconformity / degree vectors. A
-//! readout that cannot be expressed as one [`Query`] over the [`AtomicScorer`]
-//! seam (a conjunctive least-common-ancestor score formed geometrically from two
-//! anchors, for instance) is still conformalizable: compute its per-query
-//! degrees yourself and feed them in. [`calibrate`] and [`answer_set`] are the
-//! seam-bound convenience wrappers over that core.
+//! [`calibrate_scores`] accepts raw nonconformity scores.
+//! [`answer_set_from_degrees`] constructs sets for `1 - degree` scores;
+//! callers using other scores construct sets on their own score scale.
+//! [`calibrate`] and [`answer_set`] evaluate a [`Query`] through an
+//! [`AtomicScorer`] before calling these helpers.
 
 use crate::query::{answer_query, AtomicScorer, Query, QueryConfig};
 use crate::truth::Truth;
+use statskit::conformal::{
+    calibrate_in_place, ConformalError as StatskitConformalError, Coverage, Threshold,
+};
 
 /// A calibrated nonconformity threshold from [`calibrate`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,6 +82,16 @@ impl std::fmt::Display for ConformalError {
 }
 
 impl std::error::Error for ConformalError {}
+
+fn map_statskit_error(error: StatskitConformalError) -> ConformalError {
+    match error {
+        StatskitConformalError::InvalidCoverage => ConformalError::InvalidAlpha,
+        StatskitConformalError::EmptyCalibration => ConformalError::NoCalibrationExamples,
+        StatskitConformalError::NonFiniteScore { index } => {
+            ConformalError::NonFiniteScore { index }
+        }
+    }
+}
 
 /// Calibrate a nonconformity threshold on `(query, true answer)` pairs.
 ///
@@ -128,16 +138,14 @@ pub fn calibrate<T: Truth>(
 /// finite exchangeable score works), return the finite-sample conformal
 /// threshold: the `ceil((n + 1) * (1 - alpha))`-th smallest score, or
 /// `INFINITY` when the rank exceeds `n` (conservative fallback).
+/// The rank uses the caller's represented binary `f32` alpha exactly after
+/// conversion to `f64`; alpha is not rounded to a decimal approximation.
 /// Calibration and future scores must use the same fixed scoring rule and
 /// be exchangeable; the score rule must not be fitted on calibration examples.
 ///
-/// Use this to conformalize a readout that does *not* fit the atomic
-/// [`AtomicScorer`] `project(anchor, relation)` seam that [`calibrate`] is built
-/// on: a conjunctive score formed geometrically from several anchors (an LCA
-/// join, an intersection materialized off-seam) cannot be expressed as one
-/// [`Query`], so compute its per-example nonconformities yourself and calibrate
-/// here, then form a prediction set on that same score scale. Use
-/// [`answer_set_from_degrees`] only when the score is `1 - degree`.
+/// For a custom readout, supply one score per calibration example and form
+/// prediction sets on the same score scale. Use [`answer_set_from_degrees`]
+/// only when the score is `1 - degree`.
 ///
 /// # Errors
 ///
@@ -148,30 +156,21 @@ pub fn calibrate_scores(
     nonconformities: &[f32],
     alpha: f32,
 ) -> Result<ConformalThreshold, ConformalError> {
-    if !(alpha > 0.0 && alpha < 1.0) {
-        return Err(ConformalError::InvalidAlpha);
-    }
-    if nonconformities.is_empty() {
-        return Err(ConformalError::NoCalibrationExamples);
-    }
-    let mut scores = Vec::with_capacity(nonconformities.len());
-    for (index, &score) in nonconformities.iter().enumerate() {
-        if !score.is_finite() {
-            return Err(ConformalError::NonFiniteScore { index });
-        }
-        scores.push(score);
-    }
-    scores.sort_unstable_by(f32::total_cmp);
+    // Validate alpha before inspecting the scores.
+    let coverage = Coverage::from_miscoverage(f64::from(alpha)).map_err(map_statskit_error)?;
+    // Finite f32 scores widen exactly; validation retains the original indices.
+    let mut scores: Vec<f64> = nonconformities.iter().copied().map(f64::from).collect();
 
     let n = scores.len();
-    // Finite-sample conformal quantile: the ceil((n + 1)(1 - alpha))-th
-    // smallest score. Rank > n means the guarantee needs more examples than
-    // provided; fall back to the conservative full set.
-    let rank = ((n as f64 + 1.0) * (1.0 - alpha as f64)).ceil() as usize;
-    let qhat = if rank > n {
-        f32::INFINITY
-    } else {
-        scores[rank - 1]
+    let qhat = match calibrate_in_place(&mut scores, coverage).map_err(map_statskit_error)? {
+        // The calibrator selects a supplied score, so this conversion reverses
+        // the exact f32-to-f64 conversion above.
+        Threshold::Finite(selected) => {
+            let qhat = selected as f32;
+            debug_assert_eq!(f64::from(qhat), selected);
+            qhat
+        }
+        Threshold::Unbounded => f32::INFINITY,
     };
     Ok(ConformalThreshold {
         qhat,
@@ -180,8 +179,8 @@ pub fn calibrate_scores(
     })
 }
 
-/// The conformal answer set: every entity whose degree reaches `1 - q̂`,
-/// with its degree, best first.
+/// The conformal answer set: every entity whose `1 - degree` score is at most
+/// `q̂`, with its degree, best first.
 pub fn answer_set<T: Truth>(
     scorer: &dyn AtomicScorer,
     query: &Query,
@@ -194,8 +193,10 @@ pub fn answer_set<T: Truth>(
 
 /// The conformal answer set from a precomputed per-entity degree vector.
 ///
-/// The scorer-agnostic core of [`answer_set`]: every entity whose degree reaches
-/// `1 - q̂`, best first, ties broken by id. `degrees[i]` is entity `i`'s degree.
+/// The scorer-agnostic core of [`answer_set`]: every entity whose `1 - degree`
+/// score is at most `q̂`, best first, ties broken by id. `degrees[i]` is entity
+/// `i`'s degree. Compare in score space to retain ties that rounding a
+/// `1 - q̂` degree cutoff could exclude.
 /// The threshold must come from [`calibrate`] or from [`calibrate_scores`] on
 /// `1 - degree` nonconformities over the same `[0, 1]` degree scale. For another
 /// score, use [`calibrate_scores`] and construct the matching prediction set in
@@ -204,12 +205,11 @@ pub fn answer_set_from_degrees(
     degrees: &[f32],
     threshold: &ConformalThreshold,
 ) -> Vec<(usize, f32)> {
-    let cutoff = 1.0 - threshold.qhat; // -inf when qhat is inf: everything.
     let mut set: Vec<(usize, f32)> = degrees
         .iter()
         .copied()
         .enumerate()
-        .filter(|(_, d)| *d >= cutoff)
+        .filter(|(_, d)| 1.0 - *d <= threshold.qhat)
         .collect();
     set.sort_unstable_by(|a, b| {
         b.1.partial_cmp(&a.1)
@@ -222,7 +222,7 @@ pub fn answer_set_from_degrees(
 /// The conformal answer set from a sparse scored candidate pool.
 ///
 /// This is the candidate-pool companion to [`answer_set_from_degrees`]. It
-/// applies the same `degree >= 1 - q̂` cutoff, but only over candidates the
+/// applies the same `1 - degree <= q̂` cutoff, but only over candidates the
 /// caller supplied. Its threshold has the same `1 - degree` requirement as
 /// [`answer_set_from_degrees`]. When `q̂` is infinite, the conservative fallback
 /// is the full candidate pool, not every possible entity. If a candidate id
@@ -231,10 +231,9 @@ pub fn answer_set_from_scored_pool(
     scored: &[(usize, f32)],
     threshold: &ConformalThreshold,
 ) -> Vec<(usize, f32)> {
-    let cutoff = 1.0 - threshold.qhat;
     let mut best_by_id = std::collections::BTreeMap::new();
     for &(entity, degree) in scored {
-        if degree >= cutoff {
+        if 1.0 - degree <= threshold.qhat {
             best_by_id
                 .entry(entity)
                 .and_modify(|best| {
@@ -446,9 +445,54 @@ mod tests {
     }
 
     #[test]
+    fn raw_score_validation_keeps_invalid_alpha_before_empty_and_nonfinite_inputs() {
+        assert_eq!(
+            calibrate_scores(&[], 0.0).unwrap_err(),
+            ConformalError::InvalidAlpha
+        );
+        assert_eq!(
+            calibrate_scores(&[f32::NAN], 1.0).unwrap_err(),
+            ConformalError::InvalidAlpha
+        );
+        assert_eq!(
+            calibrate_scores(&[], 0.5).unwrap_err(),
+            ConformalError::NoCalibrationExamples
+        );
+        assert_eq!(
+            calibrate_scores(&[0.0, f32::NAN], 0.5).unwrap_err(),
+            ConformalError::NonFiniteScore { index: 1 }
+        );
+    }
+
+    #[test]
+    fn statskit_adapter_preserves_signed_tied_selected_scores() {
+        let alpha = 0.5f32;
+        let scores = [-4.0f32, -1.0, -1.0, 2.0];
+        let ours = calibrate_scores(&scores, alpha).unwrap();
+
+        assert_eq!(ours.qhat, -1.0);
+        assert_eq!(ours.n_calibration, 4);
+    }
+
+    #[test]
     fn raw_score_unbounded_rank_still_uses_the_conservative_fallback() {
-        let threshold = calibrate_scores(&[-4.0, 7.0], 0.1).unwrap();
+        let alpha = 0.1f32;
+        let scores = [-4.0f32, 7.0];
+        let threshold = calibrate_scores(&scores, alpha).unwrap();
         assert!(threshold.qhat.is_infinite());
+    }
+
+    #[test]
+    fn binary_alpha_boundary_selects_the_exact_rank() {
+        let scores = [0.0f32, 1.0, 2.0, 3.0];
+        let boundary = 0.2f32;
+        assert_eq!(calibrate_scores(&scores, boundary).unwrap().qhat, 3.0);
+
+        let just_below_boundary = f32::from_bits(boundary.to_bits() - 1);
+        assert!(calibrate_scores(&scores, just_below_boundary)
+            .unwrap()
+            .qhat
+            .is_infinite());
     }
 
     proptest! {
@@ -493,7 +537,32 @@ mod tests {
         }
     }
 
-    /// answer_set_from_degrees applies the `1 - qhat` cutoff to a raw degree
+    #[test]
+    fn answer_sets_include_scores_equal_to_the_calibrated_threshold() {
+        let degree = 0.1_f32;
+        let threshold = calibrate_scores(&[1.0 - degree; 9], 0.1).unwrap();
+        // In f32, subtracting this score from one does not recover the degree.
+        assert!(1.0 - threshold.qhat > degree);
+        assert_eq!(
+            answer_set_from_degrees(&[degree, 0.01], &threshold),
+            vec![(0, degree)]
+        );
+        assert_eq!(
+            answer_set_from_scored_pool(&[(37, degree), (9, 0.01)], &threshold),
+            vec![(37, degree)]
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn degree_answer_sets_retain_calibrated_ties(degree in 0.0_f32..=1.0) {
+            let threshold = calibrate_scores(&[1.0 - degree], 0.5).unwrap();
+            prop_assert_eq!(answer_set_from_degrees(&[degree], &threshold), vec![(0, degree)]);
+            prop_assert_eq!(answer_set_from_scored_pool(&[(37, degree)], &threshold), vec![(37, degree)]);
+        }
+    }
+
+    /// answer_set_from_degrees applies the nonconformity cutoff to a raw degree
     /// vector, best first with ties by id.
     #[test]
     fn answer_set_from_degrees_applies_cutoff() {
@@ -513,9 +582,11 @@ mod tests {
     #[test]
     fn answer_set_from_scored_pool_applies_cutoff_to_sparse_candidates() {
         let thr = calibrate_scores(&[0.1, 0.2, 0.3, 0.4], 0.5).unwrap();
-        let scored = [(10usize, 0.9f32), (5, 0.65), (7, 0.75), (10, 0.85)];
+        let mut scored = [(10usize, 0.9f32), (5, 0.65), (7, 0.75), (10, 0.85)];
         let set = answer_set_from_scored_pool(&scored, &thr);
         assert_eq!(set, vec![(10, 0.9), (7, 0.75)]);
+        scored.reverse();
+        assert_eq!(answer_set_from_scored_pool(&scored, &thr), set);
     }
 
     /// With too little calibration data, the sparse-pool fallback includes the

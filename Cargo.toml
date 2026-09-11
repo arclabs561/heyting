@@ -16,6 +16,7 @@ publish = true
 
 [dependencies]
 tnorms = "0.2.0"
+statskit = "0.3.0"
 # Optional: ANN-backed candidate sources.
 hyperball = { version = "0.1.6", optional = true, default-features = false }
 precinct = { version = "0.8.5", optional = true, default-features = false, features = ["index"] }

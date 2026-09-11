@@ -49,10 +49,10 @@ fragment where this evaluation is exact; cyclic query graphs are out of scope.
   only the work changes. Queries with negation or implication fall back to
   dense evaluation (no pruning benefit), since those connectives invert
   degrees and make anything outside the candidate sets a potential answer.
-- **Conformal answer sets** (`conformal`): calibrate on `(query, answer)` pairs
-  over any scorer, then return
-  answer sets containing the true answer with probability `1 − α` for
-  exchangeable queries. One run of the `fb15k237_clqa` example on FB15k-237
+- **Conformal answer sets** (`conformal`): calibrate on held-out `(query, answer)`
+  pairs. With a scorer fixed independently of calibration and exchangeable
+  queries, the answer sets have marginal coverage at least `1 − α`.
+  One run of the `fb15k237_clqa` example on FB15k-237
   with a trained DistMult measured 80% held-out coverage at the 80% nominal
   level.
 - **Witnesses** (`provenance`): which facts, through which intermediates,
