@@ -326,8 +326,8 @@ mod tests {
 
     /// With qhat = 0.3 the answer-set cutoff is degree >= 0.7: the 0.9, 0.8,
     /// 0.7 answers are in their sets, the 0.6 answer is not. Coverage over
-    /// the four calibration pairs is exactly 3/4 = 1 - alpha at alpha = 0.5
-    /// (the guarantee holding with equality on this construction).
+    /// the four calibration pairs is 3/4. This checks thresholding on the
+    /// calibration data; it is not a held-out coverage estimate.
     #[test]
     fn answer_sets_apply_the_cutoff() {
         let kg = kg();
