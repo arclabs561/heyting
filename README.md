@@ -9,9 +9,13 @@ point-embedding model, a region model, or a plain in-memory graph.
 
 ## Install
 
+The dependency below uses the published 0.16 release. For unreleased changes
+on `main`, including raw-score conformal calibration, see the
+[changelog](CHANGELOG.md).
+
 ```toml
 [dependencies]
-heyting = "0.17.0"
+heyting = "0.16.0"
 ```
 
 Dual-licensed under MIT or Apache-2.0.

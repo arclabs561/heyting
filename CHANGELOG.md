@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- `conformal::calibrate_scores` now preserves arbitrary finite raw-score
+  thresholds and rejects NaN or infinite scores with
+  `ConformalError::NonFiniteScore`. It no longer silently clamps scores to
+  `[0, 1]`; callers using degree answer-set helpers must continue to calibrate
+  `1 - degree` scores. Exhaustive matches on `ConformalError` need an arm for
+  the new variant. Callers using non-finite missing-candidate sentinels must
+  handle those cases before calibration.
+
 ## [0.17.0] - 2026-08-07
 
 ### Added

@@ -19,6 +19,9 @@
 //! conservative and the set is all entities — a correct, honest answer, not
 //! an error.
 //!
+//! Keep the scorer and score definition fixed independently of calibration
+//! examples. Calibration and future scores must be exchangeable.
+//!
 //! The guarantee is **marginal** (on average over exchangeable queries), not
 //! per-query or per-relation. Predicate-conditional calibration (a separate
 //! threshold per relation, Zhu et al., Findings ACL 2025) is a client-side
@@ -39,8 +42,9 @@ use crate::truth::Truth;
 /// A calibrated nonconformity threshold from [`calibrate`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConformalThreshold {
-    /// The calibration quantile `q̂`; `f32::INFINITY` when the calibration
-    /// set is too small for the requested confidence (full-set fallback).
+    /// The calibration order statistic `q̂`, on the score scale supplied to
+    /// [`calibrate_scores`]. It is `f32::INFINITY` when the calibration set is
+    /// too small for the requested confidence (conservative fallback).
     pub qhat: f32,
     /// The miscoverage level the threshold was calibrated for.
     pub alpha: f32,
@@ -55,6 +59,11 @@ pub enum ConformalError {
     InvalidAlpha,
     /// The calibration set is empty.
     NoCalibrationExamples,
+    /// A raw calibration score at `index` was NaN or infinite.
+    NonFiniteScore {
+        /// Position of the invalid score in the input slice.
+        index: usize,
+    },
     /// A calibration answer id is out of range for the scorer.
     AnswerOutOfRange,
 }
@@ -64,6 +73,9 @@ impl std::fmt::Display for ConformalError {
         match self {
             Self::InvalidAlpha => write!(f, "alpha must be in (0, 1)"),
             Self::NoCalibrationExamples => write!(f, "calibration set is empty"),
+            Self::NonFiniteScore { index } => {
+                write!(f, "calibration score at index {index} must be finite")
+            }
             Self::AnswerOutOfRange => write!(f, "calibration answer id out of range"),
         }
     }
@@ -83,7 +95,8 @@ impl std::error::Error for ConformalError {}
 ///
 /// [`ConformalError::InvalidAlpha`] unless `0 < alpha < 1`;
 /// [`ConformalError::NoCalibrationExamples`] on an empty slice;
-/// [`ConformalError::AnswerOutOfRange`] if an answer id is not an entity.
+/// [`ConformalError::AnswerOutOfRange`] if an answer id is not an entity; or
+/// [`ConformalError::NonFiniteScore`] if a scorer violates its degree contract.
 pub fn calibrate<T: Truth>(
     scorer: &dyn AtomicScorer,
     examples: &[(Query, usize)],
@@ -112,22 +125,25 @@ pub fn calibrate<T: Truth>(
 ///
 /// The scorer-agnostic core of [`calibrate`]: given each calibration example's
 /// nonconformity (higher = worse fit, conventionally `1 - degree` but any
-/// exchangeable score works), return the finite-sample conformal threshold, the
-/// `ceil((n + 1) * (1 - alpha))`-th smallest nonconformity (clamped to
-/// `[0, 1]`), or `INFINITY` when the rank exceeds `n` (conservative full-set
-/// fallback).
+/// finite exchangeable score works), return the finite-sample conformal
+/// threshold: the `ceil((n + 1) * (1 - alpha))`-th smallest score, or
+/// `INFINITY` when the rank exceeds `n` (conservative fallback).
+/// Calibration and future scores must use the same fixed scoring rule and
+/// be exchangeable; the score rule must not be fitted on calibration examples.
 ///
 /// Use this to conformalize a readout that does *not* fit the atomic
 /// [`AtomicScorer`] `project(anchor, relation)` seam that [`calibrate`] is built
 /// on: a conjunctive score formed geometrically from several anchors (an LCA
 /// join, an intersection materialized off-seam) cannot be expressed as one
 /// [`Query`], so compute its per-example nonconformities yourself and calibrate
-/// here, then form sets with [`answer_set_from_degrees`].
+/// here, then form a prediction set on that same score scale. Use
+/// [`answer_set_from_degrees`] only when the score is `1 - degree`.
 ///
 /// # Errors
 ///
 /// [`ConformalError::InvalidAlpha`] unless `0 < alpha < 1`;
-/// [`ConformalError::NoCalibrationExamples`] on an empty slice.
+/// [`ConformalError::NoCalibrationExamples`] on an empty slice;
+/// [`ConformalError::NonFiniteScore`] if a score is NaN or infinite.
 pub fn calibrate_scores(
     nonconformities: &[f32],
     alpha: f32,
@@ -138,8 +154,14 @@ pub fn calibrate_scores(
     if nonconformities.is_empty() {
         return Err(ConformalError::NoCalibrationExamples);
     }
-    let mut scores: Vec<f32> = nonconformities.iter().map(|s| s.clamp(0.0, 1.0)).collect();
-    scores.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut scores = Vec::with_capacity(nonconformities.len());
+    for (index, &score) in nonconformities.iter().enumerate() {
+        if !score.is_finite() {
+            return Err(ConformalError::NonFiniteScore { index });
+        }
+        scores.push(score);
+    }
+    scores.sort_unstable_by(f32::total_cmp);
 
     let n = scores.len();
     // Finite-sample conformal quantile: the ceil((n + 1)(1 - alpha))-th
@@ -173,10 +195,11 @@ pub fn answer_set<T: Truth>(
 /// The conformal answer set from a precomputed per-entity degree vector.
 ///
 /// The scorer-agnostic core of [`answer_set`]: every entity whose degree reaches
-/// `1 - q̂` (from [`calibrate_scores`] or [`calibrate`] over the same readout),
-/// best first, ties broken by id. `degrees[i]` is entity `i`'s degree; the
-/// off-seam companion to [`calibrate_scores`] for conformalizing a readout the
-/// atomic [`AtomicScorer`] seam cannot express.
+/// `1 - q̂`, best first, ties broken by id. `degrees[i]` is entity `i`'s degree.
+/// The threshold must come from [`calibrate`] or from [`calibrate_scores`] on
+/// `1 - degree` nonconformities over the same `[0, 1]` degree scale. For another
+/// score, use [`calibrate_scores`] and construct the matching prediction set in
+/// the caller.
 pub fn answer_set_from_degrees(
     degrees: &[f32],
     threshold: &ConformalThreshold,
@@ -200,9 +223,10 @@ pub fn answer_set_from_degrees(
 ///
 /// This is the candidate-pool companion to [`answer_set_from_degrees`]. It
 /// applies the same `degree >= 1 - q̂` cutoff, but only over candidates the
-/// caller supplied. When `q̂` is infinite, the conservative fallback is the full
-/// candidate pool, not every possible entity. If a candidate id appears more
-/// than once, the highest supplied degree is retained.
+/// caller supplied. Its threshold has the same `1 - degree` requirement as
+/// [`answer_set_from_degrees`]. When `q̂` is infinite, the conservative fallback
+/// is the full candidate pool, not every possible entity. If a candidate id
+/// appears more than once, the highest supplied degree is retained.
 pub fn answer_set_from_scored_pool(
     scored: &[(usize, f32)],
     threshold: &ConformalThreshold,
@@ -258,6 +282,7 @@ mod tests {
     use super::*;
     use crate::kg::FuzzyKg;
     use crate::truth::Godel;
+    use proptest::prelude::*;
 
     /// A graph whose 1p degrees are exactly the edge weights, so calibration
     /// nonconformities are hand-computable.
@@ -374,6 +399,79 @@ mod tests {
             calibrate_scores(&nonconf, 1.0).unwrap_err(),
             ConformalError::InvalidAlpha
         );
+    }
+
+    #[test]
+    fn raw_rank_and_gap_scores_keep_their_caller_scale() {
+        // `subsume`'s learned-ranker readout uses a zero-based target rank as
+        // one nonconformity. Its matching set constructor takes every item up
+        // to `floor(qhat)`, so replacing a selected rank above one with 1.0
+        // changes the set.
+        let rank_threshold = calibrate_scores(&[0.0, 1.0, 2.0, 3.0], 0.5).unwrap();
+        assert_eq!(rank_threshold.qhat, 2.0);
+        let selected_rank_count = rank_threshold.qhat.floor() as usize + 1;
+        assert_eq!(selected_rank_count, 3);
+
+        // Its score-gap readout likewise builds a set by comparing raw scores
+        // against `best_score - qhat`; the chosen order statistic may exceed
+        // one without being invalid.
+        let gap_threshold = calibrate_scores(&[0.25, 0.75, 1.75, 3.25], 0.5).unwrap();
+        assert_eq!(gap_threshold.qhat, 1.75);
+        let best_score = 3.25;
+        let selected: Vec<_> = [3.25, 2.0, 1.5, -1.0]
+            .into_iter()
+            .filter(|score| *score >= best_score - gap_threshold.qhat)
+            .collect();
+        assert_eq!(selected, vec![3.25, 2.0, 1.5]);
+    }
+
+    #[test]
+    fn finite_negative_raw_scores_are_ordered_without_clamping() {
+        let threshold = calibrate_scores(&[-4.0, -3.0, -2.0, -1.0], 0.5).unwrap();
+        assert_eq!(threshold.qhat, -2.0);
+    }
+
+    #[test]
+    fn raw_scores_reject_each_nonfinite_value_before_sorting() {
+        for (scores, index) in [
+            (vec![0.1, f32::NAN, 0.3], 1),
+            (vec![f32::INFINITY], 0),
+            (vec![f32::NEG_INFINITY], 0),
+        ] {
+            assert_eq!(
+                calibrate_scores(&scores, 0.5).unwrap_err(),
+                ConformalError::NonFiniteScore { index }
+            );
+        }
+    }
+
+    #[test]
+    fn raw_score_unbounded_rank_still_uses_the_conservative_fallback() {
+        let threshold = calibrate_scores(&[-4.0, 7.0], 0.1).unwrap();
+        assert!(threshold.qhat.is_infinite());
+    }
+
+    proptest! {
+        #[test]
+        fn raw_score_leave_one_out_rank_coverage_is_at_least_ninety_percent(
+            scores in prop::collection::vec(-10_000_i16..10_000_i16, 2..64)
+        ) {
+            let scores: Vec<f32> = scores.into_iter().map(f32::from).collect();
+            let covered = (0..scores.len()).filter(|&held_out| {
+                let calibration: Vec<f32> = scores.iter().enumerate()
+                    .filter(|(index, _)| *index != held_out)
+                    .map(|(_, &score)| score)
+                    .collect();
+                let threshold = calibrate_scores(&calibration, 0.1_f32).unwrap();
+                scores[held_out] <= threshold.qhat
+            }).count();
+
+            // `0.1_f32` is the caller-visible representable level. The rank
+            // implementation evaluates its formula in f64; this integer check
+            // expresses the nominal 90% finite-sample guarantee without a
+            // floating-point comparison. Ties can only add coverage.
+            prop_assert!(covered * 10 >= scores.len() * 9);
+        }
     }
 
     /// The seam-bound calibrate is exactly its score core over `1 - degree`:
