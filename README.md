@@ -21,41 +21,49 @@ Dual-licensed under MIT or Apache-2.0.
 ```rust
 use heyting::{answer_query_topk, FuzzyKg, Godel, Query, QueryConfig};
 
-// 0=animal 1=mammal 2=dog 3=cat; relation 0 = is_a.
-let mut kg = FuzzyKg::new(4);
-kg.add_edge(2, 0, 1, 1.0); // dog is_a mammal
-kg.add_edge(3, 0, 1, 1.0); // cat is_a mammal
-kg.add_edge(1, 0, 0, 1.0); // mammal is_a animal
+fn main() {
+    // 0=animal 1=mammal 2=dog 3=cat; relation 0 = is_a.
+    let mut kg = FuzzyKg::new(4);
+    kg.add_edge(2, 0, 1, 1.0); // dog is_a mammal
+    kg.add_edge(3, 0, 1, 1.0); // cat is_a mammal
+    kg.add_edge(1, 0, 0, 1.0); // mammal is_a animal
 
-// (dog is_a ?) AND (cat is_a ?) -> mammal.
-let q = Query::intersection(vec![Query::anchor(2, 0), Query::anchor(3, 0)]);
-let top = answer_query_topk::<Godel>(&kg, &q, &QueryConfig::default(), 1);
-assert_eq!(top[0].0, 1);
+    // (dog is_a ?) AND (cat is_a ?) -> mammal.
+    let q = Query::intersection(vec![Query::anchor(2, 0), Query::anchor(3, 0)]);
+    let top = answer_query_topk::<Godel>(&kg, &q, &QueryConfig::default(), 1);
+    assert_eq!(top[0].0, 1);
+    println!("mammal: {:.1}", top[0].1);
+}
 ```
 
 `Query` is a tree: anchors at the leaves, connectives above.
-`QueryConfig::exact()` evaluates without beam truncation; the default keeps
-at most 128 intermediate candidates per hop. Cyclic query graphs are out of
-scope.
+`QueryConfig::exact()` disables beam truncation; the default expands at most
+128 intermediate candidates per projection. The query language is tree-form:
+cyclic graphs and joins that share an intermediate are out of scope.
+
+```text
+mammal: 1.0
+```
 
 ## Modules
 
-- **Pruned evaluation** (`prune`): a `CandidateSource` (any serving
-  index) proposes per-hop candidates; intersections evaluate most-selective
-  branch first with later branches restricted to surviving entities. Results
-  are identical to dense evaluation for queries built from hops, AND, and OR;
-  only the work changes. Queries with negation or implication fall back to
-  dense evaluation (no pruning benefit), since those connectives invert
-  degrees and make anything outside the candidate sets a potential answer.
+- **Pruned evaluation** (`prune`): a `CandidateSource` proposes candidates
+  for each atomic hop; intersections evaluate the most selective branch first
+  and restrict later branches to surviving entities. For positive tree-form
+  queries, results match dense evaluation when the source covers every
+  nonzero hop result (`FuzzyKg` does); missing candidates reduce recall.
+  Queries with negation or implication use dense evaluation, since entities
+  outside a candidate set can become answers.
 - **Conformal answer sets** (`conformal`): calibrate on held-out `(query, answer)`
   pairs. With a scorer fixed independently of calibration and exchangeable
-  queries, the answer sets have marginal coverage at least `1 − α`.
-  One run of the `fb15k237_clqa` example on FB15k-237
-  with a trained DistMult measured 80% held-out coverage at the 80% nominal
-  level.
-- **Witnesses** (`provenance`): which facts, through which intermediates,
-  made an answer true. For the semiring algebras (`Godel`, `Viterbi`),
-  `explain_answer` returns one derivation whose degree equals the engine degree.
+  future pairs, the answer set contains its designated true answer with
+  marginal coverage at least `1 − α`. This does not promise coverage for each
+  query, relation, or every true answer of a multi-answer query.
+  The `fb15k237_clqa` example records one trained-DistMult run with 80%
+  held-out coverage at the 80% nominal level.
+- **Witnesses** (`provenance`): which facts and intermediates support an
+  answer. For `Godel` and `Viterbi`, `explain_answer` returns one best
+  derivation whose degree matches the engine under the same beam setting.
 - **Abduction** (`abduce`): the reverse question. Given observed entities,
   recover the template hypothesis (one-hop atoms and their pairwise
   conjunctions) that best explains them, scored by fuzzy Jaccard overlap.
@@ -91,16 +99,20 @@ their disjunction selects a single best derivation.
 
 ## Adapters
 
-- Feature `tranz`: `adapters::PointModel` wraps a trained `tranz::Scorer`
-  (`TransE`/`RotatE`/`ComplEx`/`DistMult`) as an `AtomicScorer`, with a
-  sigmoid temperature for calibrated degrees. `adapters::TemporalPointModel`
-  does the same for a trained `tranz::temporal::TComplEx`, with
-  `TimeSet`-scoped hops registered as virtual relations.
-- Feature `subsume`: `adapters::BoxModel` scores Query2Box-style over trained
-  box embeddings, and `BoxModel::materialize_explained` runs the query in the
-  geometry itself: exact box intersections, DNF unions (a single box cannot
-  represent a union unless dimension scales with entity count), no negation.
-  Returns the answer region and its composition tree.
+- Feature [`tranz`](https://github.com/arclabs561/tranz):
+  `adapters::PointModel` wraps a trained `tranz::Scorer`
+  (`TransE`/`RotatE`/`ComplEx`/`DistMult`) as an `AtomicScorer`, mapping its
+  scores to `[0, 1]` with a monotone sigmoid. Temperature changes the spread
+  without changing ranking; fit and validate it separately if calibrated
+  degrees matter.
+  `adapters::TemporalPointModel` does the same for trained
+  `tranz::temporal::TComplEx`, registering `TimeSet`-scoped hops as virtual
+  relations.
+- Feature [`subsume`](https://github.com/arclabs561/subsume):
+  `adapters::BoxModel` scores Query2Box-style over trained box embeddings.
+  `BoxModel::materialize_explained` composes positive queries geometrically as
+  a disjunctive normal form of boxes, returning the answer region and its
+  composition tree; negation and implication have no box materialization.
 - `adapters::FaithfulBoxModel` is dependency-free and scores faithful EL-style
   concept boxes by graded inclusion (`C ⊑ D`), for ontology-shaped query
   answering over region embeddings.
@@ -120,8 +132,8 @@ ICEWS14.
 ## Relationship to tranz
 
 `heyting` generalizes `tranz::query` (CQD-Beam over point embeddings,
-Arakelyan et al. 2021): implement `AtomicScorer` for any point or region
-model and the same connectives answer complex queries over it.
+Arakelyan et al. 2021): implement `AtomicScorer` for a point, region, or
+other one-hop scorer to use the same tree-form connectives.
 
 ## References
 
