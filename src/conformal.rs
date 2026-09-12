@@ -227,6 +227,10 @@ pub fn answer_set_from_degrees(
 /// [`answer_set_from_degrees`]. When `q̂` is infinite, the conservative fallback
 /// is the full candidate pool, not every possible entity. If a candidate id
 /// appears more than once, the highest supplied degree is retained.
+///
+/// A candidate pool can omit the designated true answer. The full-entity
+/// split-conformal coverage guarantee does not automatically carry over:
+/// omitted true answers reduce coverage, even when `q̂` is infinite.
 pub fn answer_set_from_scored_pool(
     scored: &[(usize, f32)],
     threshold: &ConformalThreshold,
