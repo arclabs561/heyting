@@ -294,16 +294,27 @@ mod tests {
     fn check_residuation<T: Truth>(a: f32, b: f32, c: f32) {
         let ac = T::and(a, c);
         let imp = T::residuum(a, b);
+        let residual_boundary = T::and(a, imp);
 
-        // Adjunction: a ⊗ c ≤ b iff c ≤ (a → b).
-        assert_eq!(
-            ac <= b + EPS,
-            c <= imp + EPS,
-            "residuation adjunction failed for a={a}, b={b}, c={c}"
-        );
+        // Adjunction: a ⊗ c ≤ b iff c ≤ (a → b). Keep the exact predicates:
+        // Product rounds one multiplication on the left and one division on
+        // the right. Łukasiewicz also rounds its addition/subtraction chains,
+        // whose cancellation error scales with their inputs rather than ac.
+        // This input-scaled band covers both paths while remaining local to the
+        // f32 rounding boundary (f32::EPSILON is twice unit roundoff).
+        let left = ac <= b;
+        let right = c <= imp;
+        if left != right {
+            let roundoff_band = 2.0 * f32::EPSILON * (a + b + c + 1.0);
+            assert!(
+                (ac - b).abs() <= roundoff_band,
+                "residuation adjunction disagreed away from the f32 rounding boundary: \
+                 a={a}, b={b}, c={c}, a⊗c={ac}, a→b={imp}"
+            );
+        }
         // Modus ponens: a ⊗ (a → b) ≤ b.
         assert!(
-            T::and(a, imp) <= b + EPS,
+            residual_boundary <= b + EPS,
             "modus ponens failed: {a} ⊗ ({a}→{b}) > {b}"
         );
         // Adjunction unit: c ≤ a → (a ⊗ c).
