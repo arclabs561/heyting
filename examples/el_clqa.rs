@@ -24,7 +24,7 @@
 //! making "is `Mammal` a common superclass?" a graded truth whose value depends
 //! on the logic.
 //!
-//! Run: `cargo run --example el_clqa`
+//! Run: `cargo run --features subsume --example el_clqa`
 
 use heyting::{answer_query_topk, AtomicScorer, Godel, Lukasiewicz, Product, Query, QueryConfig};
 

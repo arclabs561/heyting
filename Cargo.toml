@@ -24,7 +24,7 @@ vicinity = { version = "0.10.5", optional = true, default-features = false, feat
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
 tranz = { version = "0.8.0", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings, and the
-# subsume::clqa gated LCA readout for off-seam conjunctive conformal.
+# subsume::clqa gated LCA readout for conjunctive conformal answer sets.
 subsume = { version = "0.17", default-features = false, optional = true }
 
 [features]

@@ -2,10 +2,26 @@
 
 ## [Unreleased]
 
-### Fixed
+## [0.17.0] - 2026-09-11
 
-- Compare answer-set membership on the calibration score scale. This retains
-  boundary ties that rounding a `1 - qhat` degree cutoff could exclude.
+### Added
+
+- `answer_queries` batch API: evaluate many queries in one pass, deduplicating
+  atomic `(anchor, relation)` projections shared across queries. A reusable
+  `AtomicCache` computes each dense leaf once; per-query results are identical
+  to `answer_query`.
+- Randomized differential tests (`tests/prune_proptest.rs`) asserting pruned
+  evaluation matches dense on random EPFO query trees, including negation and
+  implication fallback, across all four algebras.
+- Finite-sample conformal coverage check (`tests/conformal_coverage.rs`)
+  verifying held-out coverage meets its nominal level over thousands of
+  deterministic trials.
+- Data-gated BetaE FB15k-237 gold-table regression (`examples/betae_fb15k237`),
+  runnable with `--ignored` in release mode.
+- All previously-unregistered examples (`el_clqa`, `el_clqa_conformal`,
+  `raw_calibration`, `taxonomy_query`, `temporal_query`) are now declared as
+  `[[example]]` targets and runnable; the EL++ proof-of-concept examples are
+  documented in `examples/README.md` with captured output.
 
 ### Changed (breaking)
 
@@ -19,39 +35,10 @@
   `1 - degree` scores. Exhaustive matches on `ConformalError` need an arm for
   the new variant. Callers using non-finite missing-candidate sentinels must
   handle those cases before calibration.
-
-## [0.17.0] - 2026-08-07
-
-### Added
-
-- `answer_queries` batch API: evaluate many queries in one pass, deduplicating
-  atomic `(anchor, relation)` projections shared across queries. A reusable
-  `AtomicCache` computes each dense leaf once; per-query results are identical
-  to `answer_query`.
-
-### Changed (breaking)
-
 - `abduce::AbduceConfig::max_conjuncts: usize` is replaced by a typed
   `conjunct_budget: ConjunctBudget` enum (`Atoms` / `Pairs`), so an
   unsupported budget is a compile error rather than a silent cap. Update any
   struct literal setting `max_conjuncts` to `conjunct_budget`.
-
-## [0.16.1] - 2026-08-07
-
-### Added
-
-- Randomized differential tests (`tests/prune_proptest.rs`) asserting pruned
-  evaluation matches dense on random EPFO query trees, including negation and
-  implication fallback, across all four algebras.
-- Finite-sample conformal coverage check (`tests/conformal_coverage.rs`)
-  verifying held-out coverage meets its nominal level over thousands of
-  deterministic trials.
-- Data-gated BetaE FB15k-237 gold-table regression (`examples/betae_fb15k237`),
-  runnable with `--ignored` in release mode.
-- All previously-unregistered examples (`el_clqa`, `el_clqa_conformal`,
-  `raw_calibration`, `taxonomy_query`, `temporal_query`) are now declared as
-  `[[example]]` targets and runnable; the EL++ proof-of-concept examples are
-  documented in `examples/README.md` with captured output.
 
 ### Changed
 
@@ -67,11 +54,12 @@
   high-dimensional boxes.
 - `truth`: documented that `Viterbi::or` is deliberately `max`, not the
   t-conorm dual of `and`, and that this is what keeps it a semiring.
-- `abduce`: `max_conjuncts` above 2 is now asserted (debug) rather than silently
-  capped.
 
 ### Fixed
 
+- Correct the residuation property test's floating-point error comparison.
+- Compare answer-set membership on the calibration score scale. This retains
+  boundary ties that rounding a `1 - qhat` degree cutoff could exclude.
 - README now reports the actual `fb15k237_clqa` conformal coverage (80%) instead
   of a stale 84%.
 - Reducibility citation corrected to Gregucci et al. (ICML 2025, arXiv:2410.12537);

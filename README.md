@@ -9,13 +9,9 @@ point-embedding model, a region model, or a plain in-memory graph.
 
 ## Install
 
-The dependency below uses the published 0.16 release. For unreleased changes
-on `main`, including raw-score conformal calibration, see the
-[changelog](CHANGELOG.md).
-
 ```toml
 [dependencies]
-heyting = "0.16.0"
+heyting = "0.17.0"
 ```
 
 Dual-licensed under MIT or Apache-2.0.
@@ -37,8 +33,10 @@ let top = answer_query_topk::<Godel>(&kg, &q, &QueryConfig::default(), 1);
 assert_eq!(top[0].0, 1);
 ```
 
-`Query` is a tree: anchors at the leaves, connectives above. Trees are the
-fragment where this evaluation is exact; cyclic query graphs are out of scope.
+`Query` is a tree: anchors at the leaves, connectives above.
+`QueryConfig::exact()` evaluates without beam truncation; the default keeps
+at most 128 intermediate candidates per hop. Cyclic query graphs are out of
+scope.
 
 ## Modules
 
