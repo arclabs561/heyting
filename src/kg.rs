@@ -10,6 +10,37 @@ use std::collections::HashMap;
 
 use crate::query::AtomicScorer;
 
+/// Edge rejected by [`FuzzyKg::try_add_edge`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum KgError {
+    /// `id` is not below the graph's entity count.
+    EntityOutOfRange {
+        /// The offending entity id.
+        id: usize,
+        /// The graph's entity count.
+        n_entities: usize,
+    },
+    /// The weight is NaN or infinite.
+    NonFiniteWeight,
+}
+
+impl std::fmt::Display for KgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EntityOutOfRange { id, n_entities } => {
+                write!(
+                    f,
+                    "entity id {id} is out of range for {n_entities} entities"
+                )
+            }
+            Self::NonFiniteWeight => write!(f, "edge weight is not finite"),
+        }
+    }
+}
+
+impl std::error::Error for KgError {}
+
 /// An in-memory knowledge graph with fuzzy edge weights in `[0, 1]`.
 ///
 /// Edges are keyed by `(head, relation)`; `project` looks up the tails and
@@ -31,7 +62,8 @@ impl FuzzyKg {
     }
 
     /// Add a weighted edge `(head, relation, tail)`. `weight` is clamped to
-    /// `[0, 1]`. Out-of-range entity ids are ignored.
+    /// `[0, 1]`. Out-of-range entity ids are ignored; use
+    /// [`FuzzyKg::try_add_edge`] to have them reported instead.
     pub fn add_edge(&mut self, head: usize, relation: usize, tail: usize, weight: f32) {
         if head >= self.n_entities || tail >= self.n_entities {
             return;
@@ -40,6 +72,31 @@ impl FuzzyKg {
             .entry((head, relation))
             .or_default()
             .push((tail, weight.clamp(0.0, 1.0)));
+    }
+
+    /// Like [`FuzzyKg::add_edge`], but returns an error instead of silently
+    /// skipping an out-of-range entity id or a NaN/infinite weight. A finite
+    /// weight is clamped to `[0, 1]`.
+    pub fn try_add_edge(
+        &mut self,
+        head: usize,
+        relation: usize,
+        tail: usize,
+        weight: f32,
+    ) -> Result<(), KgError> {
+        for id in [head, tail] {
+            if id >= self.n_entities {
+                return Err(KgError::EntityOutOfRange {
+                    id,
+                    n_entities: self.n_entities,
+                });
+            }
+        }
+        if !weight.is_finite() {
+            return Err(KgError::NonFiniteWeight);
+        }
+        self.add_edge(head, relation, tail, weight);
+        Ok(())
     }
 
     /// Number of entities.
@@ -86,6 +143,33 @@ impl AtomicScorer for FuzzyKg {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An out-of-range id or a NaN weight must be reported, not dropped.
+    #[test]
+    fn try_add_edge_rejects_out_of_range_ids_and_nan_weights() {
+        let mut kg = FuzzyKg::new(2);
+        assert_eq!(
+            kg.try_add_edge(0, 0, 2, 1.0),
+            Err(KgError::EntityOutOfRange {
+                id: 2,
+                n_entities: 2
+            })
+        );
+        assert_eq!(
+            kg.try_add_edge(5, 0, 1, 1.0),
+            Err(KgError::EntityOutOfRange {
+                id: 5,
+                n_entities: 2
+            })
+        );
+        assert_eq!(
+            kg.try_add_edge(0, 0, 1, f32::NAN),
+            Err(KgError::NonFiniteWeight)
+        );
+        assert_eq!(kg.num_edges(), 0);
+        assert_eq!(kg.try_add_edge(0, 0, 1, 2.0), Ok(()));
+        assert_eq!(kg.project(0, 0), vec![0.0, 1.0]);
+    }
 
     #[test]
     fn project_returns_edge_weights() {

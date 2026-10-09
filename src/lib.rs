@@ -50,6 +50,11 @@
 
 #![warn(missing_docs)]
 
+// Compile and run the README's Rust examples as doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+pub struct ReadmeDoctests;
+
 pub mod abduce;
 pub mod adapters;
 pub mod calibration;
@@ -72,7 +77,7 @@ pub use eval::{
     answer_query_report, crisp_answers, hard_answer_metrics, split_answers, QueryAnswerReport,
     QueryAnswers, QueryMetrics,
 };
-pub use kg::FuzzyKg;
+pub use kg::{FuzzyKg, KgError};
 pub use provenance::{explain_answer, Witness, WitnessError};
 pub use prune::{answer_query_topk_pruned, CandidateSource};
 pub use query::{
