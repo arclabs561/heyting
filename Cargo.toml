@@ -32,7 +32,7 @@ statskit = "0.3.0"
 # Optional: ANN-backed candidate sources.
 hyperball = { version = "0.1.6", optional = true, default-features = false }
 precinct = { version = "0.8.5", optional = true, default-features = false, features = ["index"] }
-vicinity = { version = "0.10.5", optional = true, default-features = false, features = ["hnsw"] }
+vicinity = { version = "0.11.1", optional = true, default-features = false, features = ["hnsw"] }
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
 tranz = { version = "0.8.0", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings, and the
