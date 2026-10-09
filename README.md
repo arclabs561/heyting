@@ -14,7 +14,8 @@ point-embedding model, a region model, or a plain in-memory graph.
 heyting = "0.17.0"
 ```
 
-Dual-licensed under MIT or Apache-2.0.
+Dual-licensed under MIT or Apache-2.0. [STABILITY.md](STABILITY.md) lists which
+APIs are expected to stay compatible within a minor release.
 
 ## Example
 
@@ -105,6 +106,9 @@ their disjunction selects a single best derivation.
   scores to `[0, 1]` with a monotone sigmoid. Temperature changes the spread
   without changing ranking; fit and validate it separately if calibrated
   degrees matter.
+  For distance models (`TransE`, `RotatE`) use `adapters::DistancePointModel`,
+  which maps a distance `d` to `exp(-d / temperature)`; under the sigmoid a
+  distance of 0 only reaches degree 0.5.
   `adapters::TemporalPointModel` does the same for trained
   `tranz::temporal::TComplEx`, registering `TimeSet`-scoped hops as virtual
   relations.

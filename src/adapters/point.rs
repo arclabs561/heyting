@@ -107,6 +107,99 @@ impl<S: tranz::Scorer> AtomicScorer for PointModel<S> {
     }
 }
 
+/// Wraps a distance-based `tranz` model (`TransE`, `RotatE`) as an
+/// [`AtomicScorer`], mapping a distance `d >= 0` to the degree
+/// `exp(-d / temperature)`.
+///
+/// [`PointModel`]'s sigmoid map suits similarity models, whose scores are
+/// negative similarities of either sign. A distance is never negative, so
+/// under the sigmoid the best possible degree is `sigmoid(0) = 0.5` and
+/// every answer looks at most half true to the t-norms and to conformal
+/// thresholds. Here an exact hit (`d = 0`) has degree `1`. Negative scores,
+/// which a distance model does not produce, map to `1`. Ranking is the same
+/// as [`PointModel`]'s.
+pub struct DistancePointModel<S> {
+    /// The wrapped tranz scorer; its scores must be distances.
+    pub model: S,
+    /// Distance scale; `1.0` maps distance 1 to `exp(-1)`.
+    pub temperature: f32,
+}
+
+impl<S> DistancePointModel<S> {
+    /// Wrap a distance model with temperature `1.0`.
+    pub fn new(model: S) -> Self {
+        Self::with_temperature(model, 1.0)
+    }
+
+    /// Wrap a distance model with a temperature; non-finite or non-positive
+    /// values fall back to `1.0`.
+    pub fn with_temperature(model: S, temperature: f32) -> Self {
+        let temperature = if temperature.is_finite() && temperature > 0.0 {
+            temperature
+        } else {
+            1.0
+        };
+        Self { model, temperature }
+    }
+
+    fn degree(&self, distance: f32) -> f32 {
+        (-distance.max(0.0) / self.temperature).exp()
+    }
+}
+
+impl<S: tranz::Scorer> AtomicScorer for DistancePointModel<S> {
+    fn num_entities(&self) -> usize {
+        self.model.num_entities()
+    }
+
+    fn project(&self, anchor: usize, relation: usize) -> Vec<f32> {
+        self.model
+            .score_all_tails(anchor, relation)
+            .iter()
+            .map(|&d| self.degree(d))
+            .collect()
+    }
+
+    fn project_batch(&self, anchors: &[usize], relation: usize) -> Vec<Vec<f32>> {
+        self.model
+            .score_all_tails_batch(anchors, relation)
+            .into_iter()
+            .map(|scores| scores.into_iter().map(|d| self.degree(d)).collect())
+            .collect()
+    }
+
+    fn project_raw(&self, anchor: usize, relation: usize) -> Option<RawProjection> {
+        Some(RawProjection::new(
+            self.model.score_all_tails(anchor, relation),
+            RawScoreOrder::LowerIsBetter,
+        ))
+    }
+
+    fn project_raw_batch(&self, anchors: &[usize], relation: usize) -> Option<Vec<RawProjection>> {
+        Some(
+            self.model
+                .score_all_tails_batch(anchors, relation)
+                .into_iter()
+                .map(|scores| RawProjection::new(scores, RawScoreOrder::LowerIsBetter))
+                .collect(),
+        )
+    }
+
+    fn project_subset(&self, anchor: usize, relation: usize, candidates: &[usize]) -> Vec<f32> {
+        let n = self.model.num_entities();
+        candidates
+            .iter()
+            .map(|&tail| {
+                if tail < n {
+                    self.degree(self.model.score(anchor, relation, tail))
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+}
+
 /// Numerically stable logistic sigmoid.
 fn sigmoid(x: f32) -> f32 {
     if x >= 0.0 {
@@ -170,6 +263,34 @@ mod tests {
         assert_eq!(
             scorer.project_batch(&[0, 1], 0),
             vec![scorer.project(0, 0), scorer.project(1, 0),]
+        );
+    }
+
+    /// A distance model's best possible score is 0. `sigmoid(-0) = 0.5`, so
+    /// the sigmoid map caps every degree at one half; the distance map
+    /// `exp(-d / T)` gives an exact hit degree 1.
+    #[test]
+    fn distance_model_exact_hit_has_degree_one() {
+        let ent = vec![vec![0.0, 0.0], vec![1.0, 0.0], vec![3.0, 4.0]];
+        let rel = vec![vec![1.0, 0.0]];
+        let transe = || tranz::TransE::from_vecs(ent.clone(), rel.clone(), 2);
+
+        let sigmoid_degrees = PointModel::new(transe()).project(0, 0);
+        assert!(sigmoid_degrees.iter().all(|&d| d <= 0.5));
+
+        let scorer = DistancePointModel::new(transe());
+        let degrees = scorer.project(0, 0);
+        assert!((degrees[1] - 1.0).abs() < 1e-6, "{degrees:?}");
+        assert!(degrees[1] > degrees[0] && degrees[0] > degrees[2]);
+        assert!(degrees.iter().all(|&d| (0.0..=1.0).contains(&d)));
+        assert_eq!(
+            scorer.project_subset(0, 0, &[2, 1, 99]),
+            vec![degrees[2], degrees[1], 0.0]
+        );
+        assert_eq!(scorer.project_batch(&[0], 0), vec![degrees.clone()]);
+        assert_eq!(
+            scorer.project_raw(0, 0).unwrap().order,
+            RawScoreOrder::LowerIsBetter
         );
     }
 

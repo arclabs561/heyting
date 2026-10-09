@@ -36,6 +36,6 @@ pub use candidates::PrecinctSubsumers;
 pub use candidates::VicinityCandidates;
 pub use faithful_box::{FaithfulBoxError, FaithfulBoxModel};
 #[cfg(feature = "tranz")]
-pub use point::PointModel;
+pub use point::{DistancePointModel, PointModel};
 #[cfg(feature = "tranz")]
 pub use temporal_point::TemporalPointModel;
