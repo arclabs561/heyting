@@ -108,7 +108,7 @@ pub fn abduce<T: Truth>(
             }
         }
     }
-    atoms.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    atoms.sort_by(|a, b| b.2.total_cmp(&a.2));
     atoms.truncate(config.beam);
 
     let mut out: Vec<Hypothesis> = atoms
@@ -140,11 +140,7 @@ pub fn abduce<T: Truth>(
         }
     }
 
-    out.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    out.sort_by(|a, b| b.score.total_cmp(&a.score));
     out.truncate(config.beam);
     out
 }

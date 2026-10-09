@@ -154,7 +154,7 @@ fn main() {
     let std_neg = |sub: Query| -> Option<Query> {
         let d = answer_query::<Product>(&model, &sub, &cfg);
         let mut sorted: Vec<f32> = d.clone();
-        sorted.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        sorted.sort_by(|a, b| b.total_cmp(a));
         let theta = sorted.get(NEG_TOP_K).copied().unwrap_or(f32::MAX);
         Some(Query::given(
             d.iter()
@@ -196,7 +196,7 @@ fn main() {
                 let gold = *answers.hard.iter().next().unwrap();
                 let rank = scores.iter().filter(|&&s| s > scores[gold]).count() + 1;
                 let mut top: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
-                top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                top.sort_by(|a, b| b.1.total_cmp(&a.1));
                 eprintln!(
                     "DEBUG {name}: instance {q:?}\n  gold {gold} final {} rank {rank}; top-1 {:?}",
                     scores[gold], top[0]
@@ -594,7 +594,7 @@ mod regression {
         let std_neg = |sub: Query| -> Option<Query> {
             let d = answer_query::<Product>(&model, &sub, &cfg);
             let mut sorted: Vec<f32> = d.clone();
-            sorted.sort_by(|a, b| b.partial_cmp(a).unwrap());
+            sorted.sort_by(|a, b| b.total_cmp(a));
             let theta = sorted.get(NEG_TOP_K).copied().unwrap_or(f32::MAX);
             Some(Query::given(
                 d.iter()

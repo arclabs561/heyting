@@ -263,11 +263,7 @@ impl BoxModel {
             .map(|point| region.degree(point, alpha, temperature))
             .collect();
         let mut top_k: Vec<(usize, f32)> = degrees.iter().copied().enumerate().collect();
-        top_k.sort_unstable_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then(a.0.cmp(&b.0))
-        });
+        top_k.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
         top_k.truncate(k);
 
         let log_volume = region.log_volume_bound();

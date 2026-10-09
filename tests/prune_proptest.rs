@@ -100,11 +100,7 @@ fn query_strategy(n: usize, nrels: usize) -> impl Strategy<Value = Query> {
 
 fn canon(xs: &[(usize, f32)]) -> Vec<(usize, f32)> {
     let mut v: Vec<(usize, f32)> = xs.iter().copied().filter(|(_, d)| *d > 0.0).collect();
-    v.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
+    v.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     v
 }
 

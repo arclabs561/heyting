@@ -283,11 +283,7 @@ fn witness<T: SelectiveOr>(
             let (branch, best) = ws
                 .into_iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| {
-                    a.degree()
-                        .partial_cmp(&b.degree())
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
+                .max_by(|(_, a), (_, b)| a.degree().total_cmp(&b.degree()))
                 .ok_or(WitnessError::ZeroDegree)?;
             let degree = best.degree();
             Ok(Witness::Any {
@@ -303,10 +299,7 @@ fn witness<T: SelectiveOr>(
             let inner_scores = answer_query::<T>(scorer, inner, config);
             let mut order: Vec<usize> = (0..inner_scores.len()).collect();
             order.sort_unstable_by(|&a, &b| {
-                inner_scores[b]
-                    .partial_cmp(&inner_scores[a])
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(a.cmp(&b))
+                inner_scores[b].total_cmp(&inner_scores[a]).then(a.cmp(&b))
             });
             let mut best: Option<(usize, f32, f32)> = None; // (v, path degree, hop degree)
             for &v in order.iter().take(config.beam_k) {

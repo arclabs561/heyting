@@ -11,6 +11,18 @@ keywords = ["knowledge-graph", "query-answering", "fuzzy-logic", "reasoning"]
 categories = ["science", "algorithms"]
 readme = "README.md"
 publish = true
+include = [
+  "src/**",
+  "examples/**",
+  "tests/**",
+  "docs/papers.md",
+  "README.md",
+  "STABILITY.md",
+  "CHANGELOG.md",
+  "LICENSE",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+]
 
 [workspace]
 

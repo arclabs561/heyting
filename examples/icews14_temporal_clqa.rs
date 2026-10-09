@@ -355,7 +355,7 @@ fn main() {
         let when = probe.when(h, r, t);
         let peak = when.iter().cloned().fold(0.0_f32, f32::max);
         let mut days: Vec<usize> = (0..n_time).collect();
-        days.sort_by(|&a, &b| when[b].partial_cmp(&when[a]).unwrap());
+        days.sort_by(|&a, &b| when[b].total_cmp(&when[a]));
         println!(
             "\ntime projection: when did ({}, {}, {}) hold?",
             ent_names[h], rel_names[r], ent_names[t]
@@ -368,7 +368,7 @@ fn main() {
         if let Some(after_id) = probe.windowed(r, event.after_all()) {
             let mut s: Vec<(usize, f32)> =
                 probe.project(h, after_id).into_iter().enumerate().collect();
-            s.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            s.sort_by(|a, b| b.1.total_cmp(&a.1));
             println!(
                 "  after the predicted event, {} {} -> {} / {} / {}",
                 ent_names[h], rel_names[r], ent_names[s[0].0], ent_names[s[1].0], ent_names[s[2].0]

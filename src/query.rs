@@ -524,9 +524,7 @@ pub(crate) fn top_k_descending(scores: &[f32], k: usize) -> Vec<(usize, f32)> {
 }
 
 fn degree_id_desc_order(a: &(usize, f32), b: &(usize, f32)) -> std::cmp::Ordering {
-    b.1.partial_cmp(&a.1)
-        .unwrap_or(std::cmp::Ordering::Equal)
-        .then(a.0.cmp(&b.0))
+    b.1.total_cmp(&a.1).then(a.0.cmp(&b.0))
 }
 
 #[cfg(test)]
@@ -534,6 +532,33 @@ mod tests {
     use super::*;
     use crate::truth::{Godel, Lukasiewicz, Product};
     use crate::FuzzyKg;
+
+    /// NaN degrees (here from NaN edge weights, which `add_edge` keeps)
+    /// must not panic the top-k sort; finite degrees stay in order.
+    #[test]
+    fn topk_with_nan_degrees_does_not_panic() {
+        let n = 300;
+        let mut kg = FuzzyKg::new(n);
+        for t in 0..n {
+            let w = if t % 3 == 0 {
+                f32::NAN
+            } else {
+                (t % 17) as f32 / 17.0
+            };
+            kg.add_edge(0, 0, t, w);
+        }
+        for k in [5, 50, n] {
+            let top =
+                answer_query_topk::<Godel>(&kg, &Query::anchor(0, 0), &QueryConfig::default(), k);
+            assert_eq!(top.len(), k);
+            let finite: Vec<f32> = top
+                .iter()
+                .map(|&(_, d)| d)
+                .filter(|d| !d.is_nan())
+                .collect();
+            assert!(finite.windows(2).all(|w| w[0] >= w[1]), "{finite:?}");
+        }
+    }
 
     // A tiny taxonomy: 0=animal, 1=mammal, 2=bird, 3=dog, 4=cat, 5=sparrow.
     // relation 0 = is_a (child -> parent). relation 1 = eats.

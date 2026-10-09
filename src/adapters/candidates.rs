@@ -187,11 +187,7 @@ where
             .filter(|(_, point)| point.len() == query.len())
             .map(|(id, point)| (id, self.ball.distance(&query, point)))
             .collect();
-        scored.sort_unstable_by(|a, b| {
-            a.1.partial_cmp(&b.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.0.cmp(&b.0))
-        });
+        scored.sort_unstable_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
         scored.truncate(self.k);
         Some(scored.into_iter().map(|(id, _)| id).collect())
     }

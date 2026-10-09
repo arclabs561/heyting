@@ -131,7 +131,7 @@ fn main() {
             let degs = degrees_of(a, b);
             let best = (0..n)
                 .filter(|&x| x != a && x != b)
-                .max_by(|&x, &y| degs[x].partial_cmp(&degs[y]).unwrap())
+                .max_by(|&x, &y| degs[x].total_cmp(&degs[y]))
                 .unwrap();
             best == l
         })

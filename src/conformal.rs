@@ -211,11 +211,7 @@ pub fn answer_set_from_degrees(
         .enumerate()
         .filter(|(_, d)| 1.0 - *d <= threshold.qhat)
         .collect();
-    set.sort_unstable_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
+    set.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     set
 }
 
@@ -249,11 +245,7 @@ pub fn answer_set_from_scored_pool(
         }
     }
     let mut set: Vec<(usize, f32)> = best_by_id.into_iter().collect();
-    set.sort_unstable_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
+    set.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     set
 }
 

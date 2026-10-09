@@ -291,9 +291,7 @@ fn top_k_descending_sparse(pairs: &[(usize, f32)], k: usize) -> Vec<(usize, f32)
 }
 
 fn degree_id_desc_order(a: &(usize, f32), b: &(usize, f32)) -> std::cmp::Ordering {
-    b.1.partial_cmp(&a.1)
-        .unwrap_or(std::cmp::Ordering::Equal)
-        .then(a.0.cmp(&b.0))
+    b.1.total_cmp(&a.1).then(a.0.cmp(&b.0))
 }
 
 #[cfg(test)]
@@ -320,11 +318,7 @@ mod tests {
     fn assert_same_topk(dense: &[(usize, f32)], pruned: &[(usize, f32)]) {
         let canon = |xs: &[(usize, f32)]| {
             let mut v: Vec<(usize, f32)> = xs.iter().copied().filter(|(_, d)| *d > 0.0).collect();
-            v.sort_unstable_by(|a, b| {
-                b.1.partial_cmp(&a.1)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(a.0.cmp(&b.0))
-            });
+            v.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
             v
         };
         let (dense, pruned) = (canon(dense), canon(pruned));
