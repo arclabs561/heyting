@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the deterministic conformal coverage test compatible with newer Proptest
+  releases by using the declared Rand version for its RNG.
+
+### Documentation
+
+- Clarify that dense negation/implication fallback retains beam truncation,
+  with a public-API regression contrasting truncated and exact chain scores.
+
 ## [0.17.0] - 2026-09-11
 
 ### Added

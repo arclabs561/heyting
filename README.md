@@ -39,7 +39,10 @@ fn main() {
 
 `Query` is a tree: anchors at the leaves, connectives above.
 `QueryConfig::exact()` disables beam truncation; the default expands at most
-128 intermediate candidates per projection. The query language is tree-form:
+128 intermediate candidates per projection. Dense evaluation, including the
+negation/implication fallback, still uses this beam setting. Truncation can
+inflate negated degrees or change implication scores; use `exact()` when every
+intermediate must be considered. The query language is tree-form:
 cyclic graphs and joins that share an intermediate are out of scope.
 
 ```text

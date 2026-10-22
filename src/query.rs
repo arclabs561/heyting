@@ -134,8 +134,12 @@ pub trait AtomicScorer {
 #[derive(Debug, Clone)]
 pub struct QueryConfig {
     /// Beam width for the existential over each intermediate variable in a
-    /// chain: only the top-`beam_k` intermediates are expanded. Higher improves
-    /// recall at `O(beam_k · |E|)` per hop. Default: 128.
+    /// chain: only the top-`beam_k` intermediates are expanded, at
+    /// `O(beam_k · |E|)` per hop. Default: 128.
+    ///
+    /// Truncation can lower positive chain degrees. Negation and implication
+    /// can invert or amplify that error; dense evaluation retains this limit.
+    /// Use [`QueryConfig::exact`] to disable intermediate truncation.
     pub beam_k: usize,
 }
 

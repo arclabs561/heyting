@@ -33,6 +33,9 @@
 //! implication invert degrees, so entities *outside* every candidate set
 //! become answers; a query containing either connective is evaluated densely
 //! by [`answer_query_topk_pruned`] (identical results, no pruning benefit).
+//! This fallback preserves the caller's beam setting: dense does not mean
+//! untruncated. Use [`QueryConfig::exact`] to expand every intermediate;
+//! negation or implication can invert or amplify a truncated chain's error.
 //!
 //! # QTO correspondence
 //!

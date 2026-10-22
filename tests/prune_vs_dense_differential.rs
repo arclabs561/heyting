@@ -30,3 +30,30 @@ fn exact_candidate_pruning_matches_dense_product_chain() {
             .collect::<Vec<_>>()
     );
 }
+
+/// Hand oracle: the only path to entity 3 uses intermediate 2, giving
+/// max(and(1, 0), and(0.8, 1)) = 0.8. Beam 1 selects intermediate 1 instead.
+#[test]
+fn negated_chain_dense_fallback_preserves_beam_config() {
+    use heyting::{answer_query, Lukasiewicz};
+
+    let mut kg = FuzzyKg::new(4);
+    kg.try_add_edge(0, 0, 1, 1.0).unwrap();
+    kg.try_add_edge(0, 0, 2, 0.8).unwrap();
+    kg.try_add_edge(2, 1, 3, 1.0).unwrap();
+    let query = Query::anchor(0, 0).then(1);
+    let beam = QueryConfig { beam_k: 1 };
+    let exact = QueryConfig::exact();
+    assert_eq!(answer_query::<Lukasiewicz>(&kg, &query, &beam)[3], 0.0);
+    assert!((answer_query::<Lukasiewicz>(&kg, &query, &exact)[3] - 0.8).abs() < 1e-6);
+
+    let negated = query.negate();
+    assert_eq!(answer_query::<Lukasiewicz>(&kg, &negated, &beam)[3], 1.0);
+    assert!((answer_query::<Lukasiewicz>(&kg, &negated, &exact)[3] - 0.2).abs() < 1e-6);
+    for config in [&beam, &exact] {
+        assert_eq!(
+            answer_query_topk_pruned::<Lukasiewicz>(&kg, &kg, &negated, config, 4),
+            answer_query_topk::<Lukasiewicz>(&kg, &negated, config, 4),
+        );
+    }
+}
