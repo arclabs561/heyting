@@ -4,11 +4,11 @@
 //! assert coverage is at least `1 - alpha - margin` over enough trials that
 //! the risk of a false failure is negligible (binomial ~5000 trials).
 //!
-//! Uses `proptest::test_runner::TestRng` so the run is deterministic.
+//! Uses a seeded Rand RNG so the full run is reproducible. The stream advances
+//! across all trials; each trial does not restart at the same seed.
 
 use heyting::{answer_query, answer_set, calibrate, FuzzyKg, Godel, Query, QueryConfig};
-use proptest::test_runner::TestRng;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn random_kg(rng: &mut impl rand::RngCore, n: usize, nrels: usize, edges: usize) -> FuzzyKg {
     let mut kg = FuzzyKg::new(n);
@@ -51,7 +51,7 @@ fn draw_pair(
 
 #[test]
 fn conformal_coverage_meets_nominal() {
-    let mut rng = TestRng::from_seed(proptest::test_runner::RngAlgorithm::ChaCha, &[0x5e; 32]);
+    let mut rng = StdRng::from_seed([0x5e; 32]);
     let (n, nrels) = (60, 4);
     let cfg = QueryConfig::default();
     let alpha = 0.2f32;
