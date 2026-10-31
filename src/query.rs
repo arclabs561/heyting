@@ -426,8 +426,17 @@ fn eval_cached<T: Truth>(
             project::<T>(scorer, &inner_scores, *relation, config, n)
         }
         Query::Intersection { branches } => {
-            let mut acc = vec![T::top(); n];
-            for branch in branches {
+            // Fold from the first branch, not from the unit: `T::and` is not
+            // bit-exact at its unit for every algebra (Łukasiewicz computes
+            // `max(0, 1 + a − 1)` in f32), so seeding with `T::top()` would
+            // perturb every degree and the sparse evaluator, which starts from
+            // the first branch, would disagree with this one.
+            let mut iter = branches.iter();
+            let Some(first) = iter.next() else {
+                return vec![T::top(); n];
+            };
+            let mut acc = eval_cached::<T>(scorer, first, config, n, cache);
+            for branch in iter {
                 let s = eval_cached::<T>(scorer, branch, config, n, cache);
                 for (a, b) in acc.iter_mut().zip(s.iter()) {
                     *a = T::and(*a, *b);
@@ -774,6 +783,57 @@ mod tests {
         assert!(
             batched < baseline,
             "batched {batched} should be < per-query baseline {baseline}"
+        );
+    }
+
+    // Bug hunt repro: seeding an intersection with `T::top()` perturbs every
+    // degree under Łukasiewicz, because `and(top, x)` computes
+    // `max(0, 1 + x − 1)` in f32 and drifts by up to 1 ulp. The sparse
+    // evaluator starts from the first branch, so the two disagreed.
+    #[test]
+    fn lukasiewicz_intersection_degrees_match_the_t_norm_exactly() {
+        struct NullScorer(usize);
+        impl AtomicScorer for NullScorer {
+            fn num_entities(&self) -> usize {
+                self.0
+            }
+            fn project(&self, _anchor: usize, _relation: usize) -> Vec<f32> {
+                vec![0.0; self.0]
+            }
+        }
+
+        let side = 99usize;
+        let n = side * side;
+        let scale = (side - 1) as f32;
+        let mut left = Vec::with_capacity(n);
+        let mut right = Vec::with_capacity(n);
+        for i in 0..side {
+            for j in 0..side {
+                left.push(i as f32 / scale);
+                right.push(j as f32 / scale);
+            }
+        }
+        let query = Query::intersection(vec![
+            Query::Given {
+                degrees: left.clone(),
+            },
+            Query::Given {
+                degrees: right.clone(),
+            },
+        ]);
+        let dense = eval_cached::<Lukasiewicz>(
+            &NullScorer(n),
+            &query,
+            &QueryConfig::exact(),
+            n,
+            &mut AtomicCache::new(),
+        );
+        let mismatches = (0..n)
+            .filter(|&k| dense[k] != Lukasiewicz::and(left[k], right[k]))
+            .count();
+        assert_eq!(
+            mismatches, 0,
+            "{mismatches} of {n} intersection degrees differ from the t-norm"
         );
     }
 }
