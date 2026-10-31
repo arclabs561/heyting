@@ -37,6 +37,11 @@ fn main() {
 }
 ```
 
+`add_edge` clamps `weight` to `[0, 1]`, silently ignores out-of-range entity
+ids (relation ids are not validated at all), and stores a `NaN` weight
+as-is; use `try_add_edge` when ids or weights come from data, because it
+returns a `KgError` for an out-of-range entity or a non-finite weight instead.
+
 `Query` is a tree: anchors at the leaves, connectives above.
 `QueryConfig::exact()` disables beam truncation; the default expands at most
 128 intermediate candidates per projection. Dense evaluation, including the
