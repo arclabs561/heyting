@@ -542,8 +542,10 @@ mod regression {
         ("pni", 0.022, 0.035, 0.0, 0.0),
     ];
 
+    type MetricTable = Vec<(&'static str, Acc)>;
+
     /// Load the data-gated inputs and return (Product, Godel) metric tables.
-    fn run() -> Option<(Vec<(&'static str, Acc)>, Vec<(&'static str, Acc)>)> {
+    fn run() -> Option<(MetricTable, MetricTable)> {
         let id2ent = load_pickle(&format!("{DIR}/id2ent.pkl"))?;
         let id2rel = load_pickle(&format!("{DIR}/id2rel.pkl"))?;
         let queries = load_pickle(&format!("{DIR}/test-queries.plain.pkl"))?;
