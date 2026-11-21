@@ -33,7 +33,8 @@ class BenchmarkUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
         if (module, name) == ("collections", "defaultdict"):
             return defaultdict
-        if (module, name) == ("builtins", "set"):
+        # Protocol 2 spells the same set constructor __builtin__.set.
+        if module in ("builtins", "__builtin__") and name == "set":
             return set
         raise pickle.UnpicklingError(f"unexpected pickle global {module}.{name}")
 

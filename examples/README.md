@@ -36,6 +36,20 @@ full-graph filter. The [BetaE generator](https://github.com/snap-stanford/KGReas
 also records answers that disappear. A missing decline here means the graph
 has no such edge. The guest's real attendance is unknown.
 
+The same effect occurs in the published FB15k-237 test data. After running
+`scripts/fetch_betae_fb15k237.sh`, run `python3 scripts/audit_betae_negation.py`.
+It evaluates the intersections on train plus validation and again with the
+test edges. The two runs use no model or scores.
+
+| Test shape | Queries losing at least one previous answer | Lost query–answer pairs |
+|---|---:|---:|
+| Two branches, one negated (`2in`) | 5,000 / 5,000 | 26,444 |
+| Three branches, one negated (`3in`) | 5,000 / 5,000 | 24,797 |
+
+All 10,000 reconstructed easy sets and 10,000 hard sets match the published
+files. The counts measure changes in graph answers. The effect on a model's
+MRR depends on where it ranks each lost answer.
+
 ## `el_clqa`: graded EL++ subsumption CLQA over region embeddings
 
 Entities are concept boxes (as from a Box2EL-style trainer); the atomic
