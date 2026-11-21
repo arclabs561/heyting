@@ -60,7 +60,12 @@ name = "icews14_temporal_clqa"
 required-features = ["tranz"]
 
 [[example]]
+name = "negated_answer_filter"
+test = true
+
+[[example]]
 name = "betae_fb15k237"
+test = true
 required-features = ["tranz"]
 
 [[example]]

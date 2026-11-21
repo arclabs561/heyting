@@ -155,6 +155,26 @@ impl QueryConfig {
     /// This disables beam truncation by setting [`QueryConfig::beam_k`] to
     /// `usize::MAX`. It is useful for exact small-graph checks and for the
     /// sparse Viterbi/QTO path when the candidate supports are already bounded.
+    ///
+    /// A missed witness can make a negated path look certain. Here entity 2
+    /// is the only way to reach 3, but the narrower beam expands entity 1.
+    ///
+    /// ```
+    /// use heyting::{answer_query, FuzzyKg, Godel, Query, QueryConfig};
+    ///
+    /// let mut graph = FuzzyKg::new(4);
+    /// graph.add_edge(0, 0, 1, 0.9);
+    /// graph.add_edge(0, 0, 2, 0.6);
+    /// graph.add_edge(2, 1, 3, 1.0);
+    /// let path = Query::anchor(0, 0).then(1);
+    /// let absent = path.clone().negate();
+    /// let narrow = QueryConfig { beam_k: 1 };
+    /// let exact = QueryConfig::exact();
+    /// assert_eq!(answer_query::<Godel>(&graph, &path, &narrow)[3], 0.0);
+    /// assert_eq!(answer_query::<Godel>(&graph, &path, &exact)[3], 0.6);
+    /// assert_eq!(answer_query::<Godel>(&graph, &absent, &narrow)[3], 1.0);
+    /// assert_eq!(answer_query::<Godel>(&graph, &absent, &exact)[3], 0.0);
+    /// ```
     pub const fn exact() -> Self {
         Self { beam_k: usize::MAX }
     }
