@@ -57,6 +57,7 @@ required-features = ["tranz"]
 
 [[example]]
 name = "icews14_temporal_clqa"
+test = true
 required-features = ["tranz"]
 
 [[example]]
