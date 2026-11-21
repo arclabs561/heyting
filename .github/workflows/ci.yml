@@ -30,6 +30,8 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: ${{ matrix.lint && 'clippy, rustfmt' || '' }}
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: python3 -m unittest discover -s scripts -p "test_prepare_betae.py"
+        if: matrix.lint
       - run: cargo fmt --check
         if: matrix.lint
       - run: cargo clippy --all-targets -- -D warnings

@@ -225,6 +225,11 @@ scripts/fetch_betae_fb15k237.sh   # ~1.4 GB download
 cargo run --release --features tranz --example betae_fb15k237
 ```
 
+The fetch verifies the Stanford archive against the SHA-256 recorded in
+`scripts/prepare_betae.py`. Re-run the same command after an interruption.
+It can use a verified `data/KG_data.zip` offline. Train the DistMult checkpoint
+separately as described in `fb15k237_clqa`.
+
 ```text
 type     n        MRR    H@1    H@3   H@10     MRR(G)   H@10
 1p     300   0.329 (P)  0.235  0.374  0.500      0.329  0.500
