@@ -361,8 +361,9 @@ fn main() {
             ent_names[h], rel_names[r], ent_names[t]
         );
         println!(
-            "  predicted top days: {} {} {} (true: {})",
-            times[days[0]], times[days[1]], times[days[2]], times[tau]
+            "  predicted top days: {} (true: {})",
+            top_names(&times, days.into_iter(), " "),
+            times[tau]
         );
         let event = TimeSet::from_degrees(&when, peak * 0.9);
         if let Some(after_id) = probe.windowed(r, event.after_all()) {
@@ -370,8 +371,10 @@ fn main() {
                 probe.project(h, after_id).into_iter().enumerate().collect();
             s.sort_by(|a, b| b.1.total_cmp(&a.1));
             println!(
-                "  after the predicted event, {} {} -> {} / {} / {}",
-                ent_names[h], rel_names[r], ent_names[s[0].0], ent_names[s[1].0], ent_names[s[2].0]
+                "  after the predicted event, {} {} -> {}",
+                ent_names[h],
+                rel_names[r],
+                top_names(&ent_names, s.into_iter().map(|(id, _)| id), " / ")
             );
         }
     }
@@ -479,4 +482,30 @@ fn load_splits(dir: &Path) -> Option<RawSplits> {
         )
     };
     Some((read("train.txt")?, read("valid.txt")?, read("test.txt")?))
+}
+
+fn top_names(names: &[String], ranked: impl Iterator<Item = usize>, separator: &str) -> String {
+    ranked
+        .take(3)
+        .map(|id| names[id].as_str())
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_only_available_predictions_in_rank_order() {
+        let names = ["a", "b", "c", "d"].map(String::from);
+        for (ranked, expected) in [
+            (vec![], ""),
+            (vec![1], "b"),
+            (vec![1, 0], "b / a"),
+            (vec![3, 0, 2, 1], "d / a / c"),
+        ] {
+            assert_eq!(top_names(&names, ranked.into_iter(), " / "), expected);
+        }
+    }
 }
