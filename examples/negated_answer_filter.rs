@@ -46,3 +46,8 @@ fn main() {
         diagnostic.mrr
     );
 }
+
+#[test]
+fn same_scores_give_two_filtered_ranks() {
+    main();
+}

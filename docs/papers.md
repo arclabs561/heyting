@@ -134,8 +134,8 @@ Three experiments answer different questions about a query engine.
   local search for cycles. A comparison on heyting's tree fragment could hold
   the scorer and query fixed, then report candidate recall and latency against
   `QueryConfig::exact()`. Break out queries with no one-hop shortcut and ones
-  containing negation. An omitted intermediate can raise the score of a
-  negated branch's complement. [NLISA](https://arxiv.org/abs/2505.08155) · [Shortcut analysis](https://proceedings.mlr.press/v267/gregucci25a.html)
+  containing negation. The runnable example on `QueryConfig::exact()` shows
+  a missed intermediate raising a negated path's degree from 0 to 1. [NLISA](https://arxiv.org/abs/2505.08155) · [Shortcut analysis](https://proceedings.mlr.press/v267/gregucci25a.html)
 - **What is being ranked?** EFOk-CQA tests 741 query types. The later NS3
   benchmark evaluates *tuples* for up to three free variables. Suppose only
   (Ada, red) and (Bea, blue) are correct. Each coordinate of (Ada, blue) is
