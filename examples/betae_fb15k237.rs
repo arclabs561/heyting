@@ -1,24 +1,20 @@
-//! The BetaE benchmark query files, evaluated exactly: cross-paper
-//! comparability on FB15k-237.
+//! Evaluate a sample from the published BetaE FB15k-237 query files.
 //!
 //! Loads the KGReasoning pickles (Ren & Leskovec, NeurIPS 2020;
 //! snap-stanford/KGReasoning) — queries, easy/hard answer sets, and the
 //! id maps — translates their entity/relation ids into the trained tranz
 //! DistMult's vocabulary (their inverse relations `-rel` map to the
 //! model's `rel_inv` reciprocal rows), builds a [`Query`] tree per query,
-//! and scores hard answers with THEIR easy/hard split, so the numbers are
-//! protocol- and file-exact against published tables (BetaE, CQD, QTO)
-//! rather than merely protocol-matched like `fb15k237_clqa`'s generated
-//! queries.
+//! and scores up to 300 mapped queries per type using the supplied answer
+//! sets. Ties use heyting's pessimistic rank. The sample and tie policy matter
+//! when comparing with full-test-set scores in published tables.
 //!
 //! All 14 BetaE query types are tree-form, hence expressible: chains
 //! (1p/2p/3p), intersections (2i/3i), projected intersections (pi/ip),
 //! unions (2u/up), and the five negation types (2in/3in/inp/pin/pni).
 //! EPFO types score under Product and Gödel. Negation types score under
 //! Product with the negated branch as a crisp top-k exclusion mask
-//! injected via `Query::given` (see the negation note in `main`: soft
-//! `1 − sigmoid` negation over uncalibrated degrees is measurably at the
-//! random floor at any temperature).
+//! injected via `Query::given`. Ties at the cutoff stay eligible.
 //!
 //! Data-gated: needs `data/FB15k-237-betae/` (run
 //! `scripts/fetch_betae_fb15k237.sh`, ~1.4 GB download) and the trained
@@ -138,19 +134,9 @@ fn main() {
         return;
     };
 
-    // Negation branches evaluate CQD-style: product ⊗ everywhere, with the
-    // standard negation 1 − x injected as a Given leaf (the terminal 'n'
-    // marker builds the un-negated branch, scores it, and complements).
-    // Negation as top-k exclusion. Soft `1 − sigmoid` negation is dead on
-    // arrival with uncalibrated embedding degrees, at ANY temperature:
-    // hard answers of A ∧ ¬B are type-compatible with B's answers by
-    // construction, so the model over-scores them on the negated atom
-    // (measured on this checkpoint: a gold ranked 392 of 14541 under B
-    // still carried sigmoid 0.993 at temperature 1, and negation MRR sat
-    // at the random floor). Published systems recover exactly by
-    // calibrating so that only near-top ranks count as "true" (QTO); the
-    // transparent version of that is a crisp mask excluding the negated
-    // branch's top-k candidates and passing everyone else.
+    // Product combines positive scores. For a negated branch, form a crisp
+    // mask by excluding scores strictly above the cutoff. Ties at the cutoff
+    // stay eligible, so fewer than NEG_TOP_K entities can be excluded.
     let std_neg = |sub: Query| -> Option<Query> {
         let d = answer_query::<Product>(&model, &sub, &cfg);
         let mut sorted: Vec<f32> = d.clone();
@@ -256,28 +242,29 @@ fn main() {
     for (name, ma) in &table {
         let negation = name.contains('n') && *name != "1p";
         let tag = if negation { "(P\u{00ac})" } else { " (P)" };
-        let mg = godel_by_type.get(name).copied().unwrap_or_default();
+        let godel = godel_columns(godel_by_type.get(name));
         println!(
-            "{:<5} {:>4}  {:>6.3}{tag} {:>6.3} {:>6.3} {:>6.3}   {:>8.3} {:>6.3}",
+            "{:<5} {:>4}  {:>6.3}{tag} {:>6.3} {:>6.3} {:>6.3}   {godel}",
             name,
             ma.n,
             ma.mrr(),
             ma.h1(),
             ma.h3(),
-            ma.h10(),
-            mg.mrr(),
-            mg.h10()
+            ma.h10()
         );
     }
     println!(
-        "\nSame files as BetaE (NeurIPS 2020) / CQD (ICLR 2021) / QTO (ICML\n\
-         2023) FB15k-237 tables: numbers are directly comparable. EPFO rows\n\
-         score under Product (P) with Godel (G) alongside; negation rows\n\
-         (P¬) exclude the negated branch's top-{NEG_TOP_K} candidates via a\n\
-         crisp Given mask (uncalibrated soft negation ranks at the random\n\
-         floor). The DistMult here is small (d 256); CQD/QTO tables use\n\
-         ComplEx-N3 at d >= 1000, so compare shapes, not absolutes."
+        "\nEach row summarizes up to {PER_TYPE} mapped queries from the BetaE test files. \
+         Negation rows use a crisp exclusion mask with a cutoff of {NEG_TOP_K}. \
+         A dash means Gödel was skipped."
     );
+}
+
+fn godel_columns(metrics: Option<&Acc>) -> String {
+    match metrics {
+        Some(m) => format!("{:>8.3} {:>6.3}", m.mrr(), m.h10()),
+        None => format!("{:>8} {:>6}", "-", "-"),
+    }
 }
 
 /// Recognize a BetaE structure tuple and name it. Structures are nested
@@ -426,7 +413,7 @@ fn type_order() -> &'static [&'static str] {
 
 /// Macro-averaged metrics for every type in [`type_order`] order, computed
 /// in one algebra. `godel` selects [`crate::Godel`] (the secondary column);
-/// otherwise [`crate::Product`] (the primary, cross-paper-comparable column).
+/// otherwise [`crate::Product`] (the primary column).
 /// Negation types have no Gödel reading (their evaluation is a crisp top-k
 /// exclusion mask), so `godel` skips them.
 fn metrics_for(
@@ -454,7 +441,7 @@ fn metrics_for(
         .collect()
 }
 
-/// Product (P) metrics: the primary, directly comparable column.
+/// Product (P) metrics: the primary column.
 fn product_metrics(
     per_type: &std::collections::HashMap<String, Vec<(Query, QueryAnswers)>>,
     model: &PointModel<tranz::DistMult>,
@@ -510,10 +497,29 @@ impl Acc {
 mod regression {
     use super::*;
 
+    #[test]
+    fn unmeasured_godel_columns_differ_from_measured_zeroes() {
+        assert_eq!(
+            godel_columns(None).split_whitespace().collect::<Vec<_>>(),
+            ["-", "-"]
+        );
+        let mut observed = Acc::default();
+        observed.add(QueryMetrics {
+            n_hard: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            godel_columns(Some(&observed))
+                .split_whitespace()
+                .collect::<Vec<_>>(),
+            ["0.000", "0.000"]
+        );
+    }
+
     /// Gold metrics captured from a release run with
     /// `data/FB15k-237-betae` and `data/fb15k237-distmult` (PER_TYPE 300).
     /// Each row is `(name, product_mrr, product_h10, godel_mrr, godel_h10)`.
-    /// The Product columns are primary and cross-paper comparable; the Godel
+    /// The Product columns are primary; the Godel
     /// columns are the secondary EPFO reading (snapshot-sensitive, so asserted
     /// with a looser tolerance). Negation types have no Godel reading (crisp
     /// top-k exclusion mask), so their Godel columns are 0 and skipped.

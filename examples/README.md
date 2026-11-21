@@ -11,12 +11,30 @@ their data they print fetch/train instructions and exit 0.
 | See the connectives on a ten-entity toy taxonomy | `taxonomy_query` |
 | See interval-validity temporal hops, no training | `temporal_query` |
 | Calibrate raw one-hop scores before query evaluation | `raw_calibration` |
+| See how adding a decline changes a filtered rank | `negated_answer_filter` |
 | Run the full stack on FB15k-237 with a trained DistMult | `fb15k237_clqa` |
 | Run the temporal stack on ICEWS with a trained TComplEx | `icews14_temporal_clqa` |
 | Score the published BetaE benchmark files, all 14 types | `betae_fb15k237` |
 | Graded EL++ subsumption complex queries over region boxes | `el_clqa` |
 | Conformal answer sets over a faithful EL++ model | `el_clqa_conformal` |
 | Conformal LCA sets over the off-seam gated readout | `el_clqa_gated_conformal` |
+
+## `negated_answer_filter`
+
+A host invites Ada. Later the graph records Ada's decline and Bea's invitation.
+For “invited with no recorded decline”, Ada disappears and Bea becomes an
+answer. The model still scores Ada higher. BetaE filters Ada because she was
+an answer on the smaller graph. A full-graph-only filter leaves her ahead
+of Bea. Both evaluations score the same target and the same predictions.
+
+```sh
+cargo run --example negated_answer_filter
+```
+
+Bea's reciprocal rank is 1 under the benchmark filter and ½ under the
+full-graph filter. The [BetaE generator](https://github.com/snap-stanford/KGReasoning/blob/ec728497f083973edbe8b9e3c4066f416fc74250/create_queries.py)
+also records answers that disappear. A missing decline here means the graph
+has no such edge. The guest's real attendance is unknown.
 
 ## `el_clqa`: graded EL++ subsumption CLQA over region embeddings
 
@@ -193,12 +211,12 @@ ICEWS_DATA=data/icews05-15 ICEWS_EMB=data/icews0515-tcomplex \
   cargo run --release --features tranz --example icews14_temporal_clqa
 ```
 
-## `betae_fb15k237`: the published benchmark files, evaluated exactly
+## `betae_fb15k237`: a sample from the published benchmark files
 
 Loads the KGReasoning pickles (queries + easy/hard answer sets) and scores
-all 14 BetaE query types file-exactly, so rows compare directly against the
-BetaE / CQD / QTO FB15k-237 tables (theirs use ComplEx-N3 at d >= 1000;
-compare shapes, not absolutes). Negation rows exclude the negated branch's
+up to 300 mapped queries per type across 14 types. The reported means describe
+this sample and use pessimistic ranks for ties. Published full-test-set
+means can differ on identical model scores. Negation rows exclude the negated branch's
 top-50 candidates via a crisp `Query::given` mask; soft `1 - sigmoid`
 negation over uncalibrated degrees measures at the random floor.
 
@@ -218,9 +236,9 @@ pi     300   0.120 (P)  0.071  0.121  0.213      0.102  0.178
 ip     300   0.126 (P)  0.075  0.129  0.230      0.088  0.193
 2u     300   0.071 (P)  0.025  0.073  0.148      0.070  0.145
 up     300   0.034 (P)  0.018  0.031  0.059      0.029  0.054
-2in    300   0.010(P¬)  0.000  0.002  0.007      0.000  0.000
-3in    300   0.011(P¬)  0.004  0.005  0.011      0.000  0.000
-inp    300   0.016(P¬)  0.005  0.008  0.035      0.000  0.000
-pin    300   0.009(P¬)  0.002  0.003  0.018      0.000  0.000
-pni    300   0.022(P¬)  0.006  0.009  0.035      0.000  0.000
+2in    300   0.010(P¬)  0.000  0.002  0.007          -      -
+3in    300   0.011(P¬)  0.004  0.005  0.011          -      -
+inp    300   0.016(P¬)  0.005  0.008  0.035          -      -
+pin    300   0.009(P¬)  0.002  0.003  0.018          -      -
+pni    300   0.022(P¬)  0.006  0.009  0.035          -      -
 ```

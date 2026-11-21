@@ -61,6 +61,7 @@ required-features = ["tranz"]
 
 [[example]]
 name = "betae_fb15k237"
+test = true
 required-features = ["tranz"]
 
 [[example]]

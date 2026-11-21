@@ -115,7 +115,12 @@ pub fn crisp_answers(scorer: &dyn AtomicScorer, query: &Query, threshold: f32) -
 ///
 /// `train` holds the edges a model was trained on; `full` additionally holds
 /// the held-out (valid/test) edges. See [`crisp_answers`] for the traversal
-/// semantics and the role of `threshold`.
+/// semantics and the role of `threshold`. For the published BetaE test split,
+/// the smaller graph includes training and validation facts.
+/// A negated branch can lose an answer when the full graph adds a fact.
+/// That entity stays in `easy` and is filtered from the benchmark ranking.
+/// To count it as a competitor when ranking the same hard targets, restrict
+/// `easy` to its intersection with the full graph's crisp answers.
 pub fn split_answers(
     train: &dyn AtomicScorer,
     full: &dyn AtomicScorer,
@@ -131,7 +136,7 @@ pub fn split_answers(
 /// Score a fuzzy answer vector against the split, reporting on hard answers
 /// only, in the filtered setting: when ranking one hard answer, the easy
 /// answers and the *other* hard answers are removed from the candidate list,
-/// so true answers do not compete with each other.
+/// including easy answers that disappeared from the full graph under negation.
 ///
 /// `scores` is an [`answer_query`] output (one degree per
 /// entity). Ties rank pessimistically (a tied competitor counts as ahead).
@@ -218,6 +223,42 @@ mod tests {
         let a = split_answers(&train, &full, &q, 0.5);
         assert!(a.easy.is_empty());
         assert_eq!(a.hard, BTreeSet::from([0]));
+    }
+
+    #[test]
+    fn negated_split_matches_closed_world_sets_across_graph_extensions() {
+        let query = Query::intersection(vec![Query::anchor(2, 0), Query::anchor(2, 1).negate()]);
+        // Two relations on two candidates. Each fact is absent, held out, or
+        // present in both graphs. Read truth directly from these edge states.
+        for mut code in 0..3usize.pow(4) {
+            let mut train = FuzzyKg::new(3);
+            let mut full = FuzzyKg::new(3);
+            let mut before = BTreeSet::new();
+            let mut after = BTreeSet::new();
+            for entity in 0..2 {
+                let invited = code % 3;
+                let declined = (code / 3) % 3;
+                code /= 9;
+                for (relation, state) in [invited, declined].into_iter().enumerate() {
+                    if state == 2 {
+                        train.add_edge(2, relation, entity, 1.0);
+                    }
+                    if state > 0 {
+                        full.add_edge(2, relation, entity, 1.0);
+                    }
+                }
+                if invited == 2 && declined != 2 {
+                    before.insert(entity);
+                }
+                if invited > 0 && declined == 0 {
+                    after.insert(entity);
+                }
+            }
+            let split = split_answers(&train, &full, &query, 0.5);
+            assert_eq!(split.easy, before);
+            assert_eq!(split.hard, after.difference(&before).copied().collect());
+            assert_eq!(crisp_answers(&full, &query, 0.5), after);
+        }
     }
 
     #[test]

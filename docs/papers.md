@@ -119,6 +119,31 @@ each composite type in both classes (the `!` suffixes mark non-reducible) and
 report the columns separately, so the reducibility inflation is measured
 rather than hidden.
 
+### Comparing negation, pruning and joint answers
+
+Three experiments answer different questions about a query engine.
+
+- **Which negatives survive the answer filter?** BetaE's generator saves answers
+  on the smaller graph, answers gained on the larger graph, and answers lost.
+  The published evaluator ranks each gained answer with the easy set filtered
+  out. The `negated_answer_filter` example isolates the effect of adding one
+  fact that invalidates an old answer. Test queries use train plus validation
+  as the smaller graph. [Generator](https://github.com/snap-stanford/KGReasoning/blob/ec728497f083973edbe8b9e3c4066f416fc74250/create_queries.py) · [Evaluator](https://github.com/snap-stanford/KGReasoning/blob/ec728497f083973edbe8b9e3c4066f416fc74250/models.py)
+- **Which candidates did pruning remove?** NLISA uses learned domains derived
+  from local relation constraints or from the query as a whole. It also uses
+  local search for cycles. A comparison on heyting's tree fragment could hold
+  the scorer and query fixed, then report candidate recall and latency against
+  `QueryConfig::exact()`. Break out queries with no one-hop shortcut and ones
+  containing negation. An omitted intermediate can raise the score of a
+  negated branch's complement. [NLISA](https://arxiv.org/abs/2505.08155) · [Shortcut analysis](https://proceedings.mlr.press/v267/gregucci25a.html)
+- **What is being ranked?** EFOk-CQA tests 741 query types. The later NS3
+  benchmark evaluates *tuples* for up to three free variables. Suppose only
+  (Ada, red) and (Bea, blue) are correct. Each coordinate of (Ada, blue) is
+  individually plausible, yet the tuple is false. Heyting returns one degree
+  per entity for a tree query. Comparisons with a joint-ranking system need
+  a common single-answer-variable subset, or a separate tuple evaluator.
+  [EFOk-CQA](https://doi.org/10.1145/3711896.3737426) · [NS3](https://arxiv.org/abs/2605.25985)
+
 ### Algorithmic Learning in a Random World (Vovk, Gammerman, Shafer, 2005)
 
 The conformal prediction book. If calibration and test data are

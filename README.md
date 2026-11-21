@@ -131,6 +131,10 @@ their disjunction selects a single best derivation.
 
 ## Examples
 
+Run `cargo run --example negated_answer_filter` to see one guest lose her
+place in an answer set when a decline arrives. The example scores the same
+predictions with two filters and explains why the reciprocal rank changes.
+
 ```sh
 cargo run --release --features tranz --example fb15k237_clqa
 cargo run --release --features tranz --example icews14_temporal_clqa
