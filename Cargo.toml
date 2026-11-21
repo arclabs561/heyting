@@ -34,7 +34,7 @@ hyperball = { version = "0.1.6", optional = true, default-features = false }
 precinct = { version = "0.8.5", optional = true, default-features = false, features = ["index"] }
 vicinity = { version = "0.10.5", optional = true, default-features = false, features = ["hnsw"] }
 # Optional: adapt a tranz point-embedding model as an AtomicScorer.
-tranz = { version = "0.8.0", optional = true }
+tranz = { version = "0.9.0", optional = true }
 # Optional: Query2Box-style scoring over trained box embeddings, and the
 # subsume::clqa gated LCA readout for conjunctive conformal answer sets.
 subsume = { version = "0.17", default-features = false, optional = true }
