@@ -68,6 +68,16 @@ class PrepareTests(unittest.TestCase):
         self.assertTrue((self.target / "id2rel.pkl").is_file())
         self.assertEqual(self.fetches, 1)
 
+    def test_repair_nonempty_corruption_with_intact_receipt(self):
+        self.run_setup()
+        for name in ("train.txt", "test-queries.plain.pkl"):
+            path = self.target / name
+            original = path.read_bytes()
+            path.write_bytes(b"X" * len(original))
+            self.run_setup()
+            self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(self.fetches, 1)
+
     def test_bad_download_leaves_no_cached_archive_or_receipt(self):
         def bad_fetch(path):
             path.write_bytes(b"incomplete download")
