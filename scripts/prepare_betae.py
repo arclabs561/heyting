@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import hashlib
+import json
 from pathlib import Path
 import pickle
 import shutil
@@ -58,10 +59,17 @@ def prepare(data, expected=SHA256, fetch=download):
     data.mkdir(parents=True, exist_ok=True)
     target = data / DATASET
     receipt = target / RECEIPT
-    if (receipt.is_file() and receipt.read_text() == expected
-            and all((target / name).is_file() and (target / name).stat().st_size
-                    for name in (*RAW, *PLAIN))):
-        return
+    names = (*RAW, *PLAIN)
+    if receipt.is_file():
+        try:
+            saved = json.loads(receipt.read_text())
+        except (ValueError, UnicodeError):
+            saved = None  # Earlier receipts contained only the archive digest.
+        if (isinstance(saved, dict) and saved.get("archive") == expected
+                and isinstance(saved.get("files"), dict)
+                and all((target / name).is_file()
+                        and saved["files"].get(name) == digest(target / name) for name in names)):
+            return
 
     with TemporaryDirectory(dir=data) as temp:
         stage = Path(temp)
@@ -92,9 +100,10 @@ def prepare(data, expected=SHA256, fetch=download):
         # Keep unrelated user files in the destination. Only complete files
         # become visible, and an interrupted installation has no new receipt.
         target.mkdir(exist_ok=True)
-        for name in (*RAW, *PLAIN):
+        files = {name: digest(stage / name) for name in names}
+        for name in names:
             (stage / name).replace(target / name)
-        (stage / RECEIPT).write_text(expected)
+        (stage / RECEIPT).write_text(json.dumps({"archive": expected, "files": files}))
         (stage / RECEIPT).replace(receipt)
 
 
