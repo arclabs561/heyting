@@ -14,6 +14,7 @@ their data they print fetch/train instructions and exit 0.
 | See how adding a decline changes a filtered rank | `negated_answer_filter` |
 | Run the full stack on FB15k-237 with a trained DistMult | `fb15k237_clqa` |
 | Run the temporal stack on ICEWS with a trained TComplEx | `icews14_temporal_clqa` |
+| Verify witnessed film and profession intersections against an exact join | [`typed_film_query`](../docs/experiments/typed-film-query/README.md) |
 | Score the published BetaE benchmark files, all 14 types | `betae_fb15k237` |
 | Graded EL++ subsumption complex queries over region boxes | `el_clqa` |
 | Conformal answer sets over a faithful EL++ model | `el_clqa_conformal` |

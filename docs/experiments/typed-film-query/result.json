@@ -1,0 +1,53 @@
+{
+  "counts": {
+    "at_1_films_answers": 3745,
+    "at_3_films_answers": 6182,
+    "at_8_films_answers": 7605,
+    "full_snapshot_answers": 11101,
+    "new_test_witness": 2028,
+    "new_validation_witness": 1278,
+    "queries": 2192,
+    "queries_with_any_full_answer": 1641,
+    "queries_with_any_train_answer": 1505,
+    "train_witnessed": 7795,
+    "unfiltered_two_hop_candidates": 34288
+  },
+  "example_witness": [
+    [
+      "/m/0127m7",
+      "/film/director/film",
+      "/m/02z9rr"
+    ],
+    [
+      "/m/0127m7",
+      "/film/actor/film./film/performance/film",
+      "/m/02z9rr"
+    ],
+    [
+      "/m/0127m7",
+      "/people/person/profession",
+      "/m/02hrh1q"
+    ]
+  ],
+  "positive_queries_emptied_by_pruning": {
+    "1": 198,
+    "3": 32,
+    "8": 0
+  },
+  "profession_ids": [
+    "/m/02hrh1q",
+    "/m/01d_h8",
+    "/m/0dxtg",
+    "/m/03gjzk",
+    "/m/02jknp",
+    "/m/0np9r",
+    "/m/018gz8",
+    "/m/09jwl"
+  ],
+  "query_directors": 274,
+  "sha256": {
+    "test": "5711cf41623ceb4eacc50eb6108a3ca6565c7492e3caaf82a3e355cc660d1574",
+    "train": "6e4c2782169af21e9743f3b1d200886f5d595bf6bc504ec1351720949c5cdfae",
+    "valid": "cf6309010852f6a8d47a45df830a426415d1ee6f7a3970a8376ff1fb81db4a5c"
+  }
+}
