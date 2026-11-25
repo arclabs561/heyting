@@ -39,8 +39,9 @@ fn main() {
 
 `add_edge` clamps `weight` to `[0, 1]`, silently ignores out-of-range entity
 ids (relation ids are not validated at all), and stores a `NaN` weight
-as-is; use `try_add_edge` when ids or weights come from data, because it
-returns a `KgError` for an out-of-range entity or a non-finite weight instead.
+as-is. In the published 0.17.0 package, validate entity IDs and finite weights
+before inserting external data. The development branch adds `try_add_edge`,
+which returns a `KgError` for an out-of-range entity or non-finite weight.
 
 `Query` is a tree: anchors at the leaves, connectives above.
 `QueryConfig::exact()` disables beam truncation; the default expands at most
