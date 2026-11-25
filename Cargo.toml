@@ -52,6 +52,10 @@ subsume = ["dep:subsume"]
 vicinity = ["dep:vicinity"]
 
 [[example]]
+name = "typed_film_query"
+test = true
+
+[[example]]
 name = "fb15k237_clqa"
 required-features = ["tranz"]
 
